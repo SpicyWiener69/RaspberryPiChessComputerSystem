@@ -10,7 +10,7 @@
 #include <iostream>
 
 
-#define CHESS_BOARD_SIDE_LEN  1000
+#define CHESS_BOARD_SIDE_LEN  400
 
 //TODO?: getter function for globals
 
@@ -22,7 +22,7 @@ static lv_obj_t* menu_button;
 
 static GameSettings game_settings = {
     false,
-    1000,
+    1500,
     2,
     WHITE                                          
 };
