@@ -15,16 +15,22 @@
 
 void init_ui(void);
 
+
+/* === WARNING UI EXTERNAL FUNCTIONS ============================ */
+
+void warning_ui_toggle(bool show); 
+
 /* === GRID UI EXTERNAL FUNCTIONS ============================ */
 
-void board_grid_ui(void);
 void draw_fen(std::string fen);
+
+//void board_grid_ui(void);
 
 
 /* === MENU UI EXTERNAL FUNCTIONS ============================ */
 
-void chess_settings_menu_ui(void);
-void open_menu_ui(void);
+//void chess_settings_menu_ui(void);
+//void open_menu_ui(void);
 
 
 /* === DEFINITIONS ============================ */

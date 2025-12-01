@@ -15,10 +15,11 @@
 //TODO?: getter function for globals
 
 /* === STATIC VARIABLES ============================ */
-static lv_obj_t* board_container;
-static lv_obj_t* settings_menu;
-static lv_obj_t* main_ui;
-static lv_obj_t* menu_button;
+static lv_obj_t* board_container = nullptr;
+static lv_obj_t* settings_menu = nullptr;
+static lv_obj_t* main_ui = nullptr;
+static lv_obj_t* menu_button = nullptr;
+static lv_obj_t* warning_ui = nullptr;
 
 static GameSettings game_settings = {
     false,
@@ -27,14 +28,19 @@ static GameSettings game_settings = {
     WHITE                                          
 };
 
+/* === WARNING UI INTERNAL FUNCTIONS ============================ */
+void warning_ui_init(void);
+void warning_ui_toggle(bool show);
 
 /* === GRID UI INTERNAL FUNCTIONS ============================ */
+static void board_grid_ui(void);
 static std::vector<std::string> split(const std::string& s, char delim);
 static const lv_image_dsc_t* piece_picker(char piece);
 static void draw_on_grid(lv_obj_t* board_container,const lv_image_dsc_t* src, int col, int row);
 
-
 /* === MENU UI INTERNAL FUNCTIONS ============================ */
+static void chess_settings_menu_ui(void);
+static void open_menu_ui(void);
 
 static void init_label_with_int(lv_obj_t* label, int value, const char* fmt);
 
@@ -54,22 +60,43 @@ static void menu_open_cb(lv_event_t* e);
 void init_ui(void){
     main_ui = lv_obj_create(lv_screen_active());
     lv_obj_center(main_ui);
-    lv_obj_set_size(main_ui,1200,1200);
+    lv_obj_set_size(main_ui,800,800);
 
     board_container = lv_obj_create(main_ui);
     settings_menu = lv_menu_create(main_ui);
     menu_button = lv_button_create(main_ui);
-    
+    warning_ui = lv_obj_create(main_ui);
+
     board_grid_ui();
     open_menu_ui();
     chess_settings_menu_ui();
+    warning_ui_init();
 }
+
+void warning_ui_init(void){
+    lv_obj_t* cont = warning_ui;
+    lv_obj_clear_flag(warning_ui, LV_OBJ_FLAG_HIDDEN);////test
+    lv_obj_set_size(cont, 400, 200);
+    lv_obj_center(cont);
+    lv_obj_t* label = lv_label_create(cont);          
+    lv_label_set_text(label, "Redo move and press the button");              
+    lv_obj_center(label);
+}
+
+void warning_ui_toggle(bool show){
+    if (show){
+        lv_obj_clear_flag(warning_ui, LV_OBJ_FLAG_HIDDEN);
+    }
+    else{
+        lv_obj_add_flag(warning_ui, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 
 
 /* ======================================== */
 /* === GRID UI ========================== */
 /* ======================================== */
-
 
 void board_grid_ui(void){
     lv_obj_t* cont = board_container;
@@ -106,7 +133,7 @@ void draw_fen(std::string fen){
             char piece = row[row_iter];
             row_iter += 1;
             if(isdigit(piece)){
-                // character encodings for digits are all in order from 48 (for '0') to 57 (for '9'). 
+                /* character encodings for digits are all in order from 48 (for '0') to 57 (for '9'). */
                 j += piece - '0';
                 continue;
             }
@@ -131,7 +158,7 @@ static std::vector<std::string> split(const std::string& s, char delim) {
             current += c;
         }
     }
-    result.push_back(current); // last token
+    result.push_back(current); 
     return result;
 }
 

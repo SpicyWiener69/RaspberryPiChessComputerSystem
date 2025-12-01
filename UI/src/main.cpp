@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cassert>
 
 #include "lvgl/lvgl.h"
 #include "lvgl/demos/lv_demos.h"
@@ -32,15 +33,15 @@
 
 
 #include "src/ui.h"
-//#include "src/assets/assets.h"
 #include "src/socket_server.h"
 
 #include <cassert>
 #include <iostream>
 #include <string>
-
+#include <vector>
 
 /* Internal functions */
+static std::vector<std::string> split(const std::string& s, char delim);
 static void server_msg_cb(const char *msg, size_t len, void *user_data);
 static void configure_simulator(int argc, char **argv);
 static void print_lvgl_version(void);
@@ -175,30 +176,53 @@ int main(int argc, char **argv)
     return 0;
 }
  
-static void server_msg_cb(const char *msg, size_t len, void *user_data) {
+static void server_msg_cb(const char* msg, size_t len, void* user_data) {
     std::string str (msg,len);
-    std::cout << "recieved:" << str << '\n';
     if (str == "quit\n"){
         ui_shutdown();
     }
-    
-    draw_fen(str);
+    std::cout << "recieved:" << str << '\n';
+    auto parts = split(str,';');
+    if (parts[0] == "fen")
+        draw_fen(parts[1]);
+    else if (parts[0] == "redo"){
+        warning_ui_toggle(true);
+    }
+    else if (parts[0] == "resume"){
+        warning_ui_toggle(false);
+    }
+    else{
+        assert(false && "Unknown message type");
+    }
 }
 
 void poll_timer(lv_timer_t * timer)
 {
   /* Use the user_data */
   socket_poll();
-  uint32_t * user_data = static_cast<uint32_t *>(lv_timer_get_user_data(timer));
   std::cout << "server polled"<<'\n';
+  //uint32_t * user_data = static_cast<uint32_t *>(lv_timer_get_user_data(timer));
   
-  /* Do something with LVGL */
-  
+  /* Do something with LVGL */  
 }
+
 static void ui_shutdown(void){
     std::cout << "shutting down..." << std::endl;
     server_deinit();
     exit(0);
 }
 
-
+static std::vector<std::string> split(const std::string& s, char delim) {
+    std::vector<std::string> result;
+    std::string current;
+    for (char c : s) {
+        if (c == delim) {
+            result.push_back(current);
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    result.push_back(current); // last token
+    return result;
+}
