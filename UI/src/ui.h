@@ -36,17 +36,17 @@ void draw_fen(std::string fen);
 /* === DEFINITIONS ============================ */
 
 
-typedef enum{
-    NONE,
-    BLACK,
-    WHITE
-}Side;
+// typedef enum{
+//     NONE,
+//     BLACK,
+//     WHITE
+// }Side;
 
 typedef struct{
     bool computer_playing;
     int engine_timeout;
     int engine_strength;
-    Side side;
+    int side; // 0 is black, 1 is white
 }GameSettings;
 
 

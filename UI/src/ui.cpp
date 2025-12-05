@@ -8,35 +8,54 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cassert>
 
 
-#define CHESS_BOARD_SIDE_LEN  400
 
 //TODO?: getter function for globals
 
 /* === STATIC VARIABLES ============================ */
 static lv_obj_t* board_container = nullptr;
 static lv_obj_t* settings_menu = nullptr;
-static lv_obj_t* main_ui = nullptr;
-static lv_obj_t* menu_button = nullptr;
+static lv_obj_t* screen = nullptr;
+static lv_obj_t* button_container = nullptr;
 static lv_obj_t* warning_ui = nullptr;
 
+/*default game settings*/
 static GameSettings game_settings = {
-    false,
-    1500,
-    2,
-    WHITE                                          
+    false,  //computer_playing
+    2,      //engine_timeout(s)
+    1500,   //engine_strength(elo)
+    0       // computer side; 0 is black, 1 is white                                       
 };
+
+/* === UI dimension definitions ============================ */
+namespace UiDim{
+    struct Vec2{
+        int x;
+        int y;
+    };
+    Vec2 display = {800,480};
+    Vec2 chessboard = {330,330};
+    Vec2 warning_ui = {300,300};
+    Vec2 settings_ui = {400,450};
+    Vec2 settings_button = {100,80};
+    Vec2 start_button = settings_button;
+
+};
+
 
 /* === WARNING UI INTERNAL FUNCTIONS ============================ */
 void warning_ui_init(void);
 void warning_ui_toggle(bool show);
+
 
 /* === GRID UI INTERNAL FUNCTIONS ============================ */
 static void board_grid_ui(void);
 static std::vector<std::string> split(const std::string& s, char delim);
 static const lv_image_dsc_t* piece_picker(char piece);
 static void draw_on_grid(lv_obj_t* board_container,const lv_image_dsc_t* src, int col, int row);
+
 
 /* === MENU UI INTERNAL FUNCTIONS ============================ */
 static void chess_settings_menu_ui(void);
@@ -55,17 +74,18 @@ static void confirm_button_cb(lv_event_t* e);
 /* main page button cb */
 static void menu_open_cb(lv_event_t* e);
 
-
+/*helpers*/
+static void send_json(void);
 
 void init_ui(void){
-    main_ui = lv_obj_create(lv_screen_active());
-    lv_obj_center(main_ui);
-    lv_obj_set_size(main_ui,800,800);
-
-    board_container = lv_obj_create(main_ui);
-    settings_menu = lv_menu_create(main_ui);
-    menu_button = lv_button_create(main_ui);
-    warning_ui = lv_obj_create(main_ui);
+    screen = lv_obj_create(lv_screen_active());
+    lv_obj_center(screen);
+    lv_obj_set_size(screen,UiDim::display.x, UiDim::display.y);
+    
+    board_container = lv_obj_create(screen);
+    settings_menu = lv_menu_create(screen);
+    //button_container = lv_button_create(screen);
+    warning_ui = lv_obj_create(screen);
 
     board_grid_ui();
     open_menu_ui();
@@ -75,8 +95,8 @@ void init_ui(void){
 
 void warning_ui_init(void){
     lv_obj_t* cont = warning_ui;
-    lv_obj_clear_flag(warning_ui, LV_OBJ_FLAG_HIDDEN);////test
-    lv_obj_set_size(cont, 400, 200);
+    lv_obj_add_flag(warning_ui, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(cont, UiDim::warning_ui.x, UiDim::warning_ui.y);
     lv_obj_center(cont);
     lv_obj_t* label = lv_label_create(cont);          
     lv_label_set_text(label, "Redo move and press the button");              
@@ -93,31 +113,34 @@ void warning_ui_toggle(bool show){
 }
 
 
-
 /* ======================================== */
 /* === GRID UI ========================== */
 /* ======================================== */
 
 void board_grid_ui(void){
     lv_obj_t* cont = board_container;
-    
     static int32_t col_dsc[] = { LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1),
-                                LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+        LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t row_dsc[] = { LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), 
-                                LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), 
-                                LV_GRID_TEMPLATE_LAST};
-
-    /*Create a container with grid*/
-    lv_obj_center(cont);
+        LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+            
     lv_obj_set_style_grid_column_dsc_array(cont, col_dsc, 0);
     lv_obj_set_style_grid_row_dsc_array(cont, row_dsc, 0);
-    lv_obj_set_size(cont, CHESS_BOARD_SIDE_LEN, CHESS_BOARD_SIDE_LEN);
+    lv_obj_set_size(cont, UiDim::chessboard.x, UiDim::chessboard.y);
     lv_obj_set_layout(cont, LV_LAYOUT_GRID);
     lv_obj_set_style_pad_all(cont, 0, 0);
     lv_obj_set_style_pad_row(cont,0,0);
     lv_obj_set_style_pad_column(cont,0,0);
-}
+    lv_obj_center(cont);
 
+    /*offset y a little to make room */
+    lv_obj_set_y(cont, 40);
+
+    /*rotate the board grid along the center axis */
+    lv_obj_set_style_transform_pivot_x(cont,UiDim::chessboard.x / 2, 0);   
+    lv_obj_set_style_transform_pivot_y(cont,UiDim::chessboard.y / 2, 0); 
+    lv_obj_set_style_transform_angle(cont, 2700, 0);
+}
 
 
 void draw_fen(std::string fen){
@@ -147,6 +170,7 @@ void draw_fen(std::string fen){
     std::cout << "________________" <<'\n';
 }
 
+
 static std::vector<std::string> split(const std::string& s, char delim) {
     std::vector<std::string> result;
     std::string current;
@@ -161,6 +185,7 @@ static std::vector<std::string> split(const std::string& s, char delim) {
     result.push_back(current); 
     return result;
 }
+
 
 static const lv_image_dsc_t* piece_picker(char piece){
     const lv_image_dsc_t* src;
@@ -214,14 +239,15 @@ static const lv_image_dsc_t* piece_picker(char piece){
     return src;
 }
 
+
 static void draw_on_grid(lv_obj_t* cont,const lv_image_dsc_t* src, int col, int row){
     lv_obj_t* img = lv_image_create(cont);
     lv_image_set_src(img, src);
 
     lv_coord_t img_width = lv_image_get_src_width(img);
     lv_coord_t img_height = lv_image_get_src_height(img);
-    int target_w = CHESS_BOARD_SIDE_LEN / 8;
-    int target_h = CHESS_BOARD_SIDE_LEN / 8;
+    int target_w = UiDim::chessboard.x / 8;
+    int target_h = UiDim::chessboard.y / 8;
     float zoom_w = (float)target_w / img_width;
     float zoom_h = (float)target_h / img_height;
     float z = zoom_w < zoom_h ? zoom_w : zoom_h;
@@ -232,22 +258,40 @@ static void draw_on_grid(lv_obj_t* cont,const lv_image_dsc_t* src, int col, int 
             LV_GRID_ALIGN_STRETCH, row, 1);
 }
 
+
 /* ======================================== */
 /* === MENU UI ========================== */
 /* ======================================== */
 
 
-
 void open_menu_ui(void){
     //lv_obj_t* button = lv_button_create(lv_screen_active());
-    lv_obj_t* button = menu_button;
-    lv_obj_align(menu_button, LV_ALIGN_TOP_RIGHT, 0, 0);
+    // lv_obj_t* cont = button_container;
+    // lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, -12);
+    // lv_obj_set_size(cont,330,90);
+    // lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);       // remove background
+    // lv_obj_set_style_border_width(cont, 0, 0);            // remove border
+    
     lv_obj_t* label;
-    label = lv_label_create(button);          
-    lv_label_set_text(label, "Game Settings");              
+
+    lv_obj_t* settings_button = lv_button_create(screen);
+    lv_obj_align(settings_button, LV_ALIGN_TOP_MID, 90, -12);
+    lv_obj_set_size(settings_button,UiDim::settings_button.x,UiDim::settings_button.y);
+    label = lv_label_create(settings_button);     
+    lv_label_set_text(label, "Settings");              
     lv_obj_center(label);
-    lv_obj_add_event_cb(button, menu_open_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(settings_button, menu_open_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t* start_button = lv_button_create(screen);
+    lv_obj_align(start_button, LV_ALIGN_TOP_MID, -90, -12);
+    lv_obj_set_size(start_button,UiDim::start_button.x,UiDim::start_button.y);
+    label = lv_label_create(start_button);     
+    lv_label_set_text(label, "start button");              
+    lv_obj_center(label);
+    lv_obj_add_event_cb(start_button,confirm_button_cb,LV_EVENT_CLICKED,NULL);
+
 }
+
 
 static void menu_open_cb(lv_event_t* e){
     lv_obj_t* menu = settings_menu;
@@ -255,6 +299,7 @@ static void menu_open_cb(lv_event_t* e){
     lv_event_code_t code = lv_event_get_code(e);
    
     if(code == LV_EVENT_CLICKED) {
+        lv_obj_move_foreground(menu);
        lv_obj_remove_flag(menu,LV_OBJ_FLAG_HIDDEN); 
     }
 }
@@ -266,11 +311,9 @@ void chess_settings_menu_ui(void){
     
     lv_obj_t* menu = settings_menu;
 
-    lv_obj_set_size(menu, 500, 800);
+    lv_obj_set_size(menu, UiDim::settings_ui.x, UiDim::settings_ui.y);
 
-    //lv_obj_center(menu);
-    
-    lv_obj_align(menu, LV_ALIGN_TOP_RIGHT, 0,100);
+    lv_obj_align(menu, LV_ALIGN_TOP_MID, 0,-12);
     lv_obj_set_style_bg_color(menu,lv_color_hex(0xFFFFCC), LV_PART_MAIN);
     lv_menu_set_mode_root_back_button(menu, LV_MENU_ROOT_BACK_BUTTON_ENABLED);
     lv_obj_add_event_cb(menu, exit_menu_cb, LV_EVENT_CLICKED, menu);
@@ -286,9 +329,7 @@ void chess_settings_menu_ui(void){
     lv_obj_t * cont;
     lv_obj_t * label;
 
-    /*
-    Create the engine settings page
-    */
+    /*Create the engine settings page*/
     lv_obj_t * engine_page = lv_menu_page_create(menu, "Page 1");
 
     cont = lv_menu_cont_create(engine_page);
@@ -301,7 +342,6 @@ void chess_settings_menu_ui(void){
     lv_obj_add_event_cb(engine_enable_sw, engine_enable_sw_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_user_data(engine_enable_sw, engine_section);
     
-
     /*strength settings*/
     cont = lv_menu_cont_create(engine_section);
     label = lv_label_create(cont);
@@ -341,15 +381,15 @@ void chess_settings_menu_ui(void){
     lv_obj_t* side_sw = lv_switch_create(cont);
     lv_obj_add_event_cb(side_sw,computer_side_sw_cb,LV_EVENT_CLICKED,NULL);
     label = lv_label_create(cont);
-    (game_settings.side == BLACK)? lv_label_set_text(label, "Black"):lv_label_set_text(label, "White"); 
+    (game_settings.side == 0)? lv_label_set_text(label, "Black"):lv_label_set_text(label, "White"); 
     lv_obj_set_user_data(side_sw, label);
     
-    cont = lv_menu_cont_create(engine_section);
-    lv_obj_t* confirm_button = lv_button_create(cont);
-    label = lv_label_create(confirm_button);          
-    lv_label_set_text(label, "Confirm");              
-    lv_obj_center(label);
-    lv_obj_add_event_cb(confirm_button,confirm_button_cb,LV_EVENT_CLICKED,menu);
+    // cont = lv_menu_cont_create(engine_section);
+    // lv_obj_t* confirm_button = lv_button_create(cont);
+    // label = lv_label_create(confirm_button);          
+    // lv_label_set_text(label, "Confirm");              
+    // lv_obj_center(label);
+    // lv_obj_add_event_cb(confirm_button,confirm_button_cb,LV_EVENT_CLICKED,menu);
     
     /*hide the engine settings at init*/
     lv_obj_add_flag(engine_section, LV_OBJ_FLAG_HIDDEN);
@@ -424,29 +464,38 @@ static void computer_side_sw_cb(lv_event_t* e){
     lv_obj_t* side_label = (lv_obj_t *)lv_obj_get_user_data(sw);
     if (!side_label) return;
     if (lv_obj_has_state(sw, LV_STATE_CHECKED)){
-        game_settings.side = BLACK;
+        game_settings.side = 0;
         lv_label_set_text(side_label, "Black");
     }
     else{
-        game_settings.side = WHITE;
+        game_settings.side = 1;
         lv_label_set_text(side_label, "White");
     }
 }
 
+static void send_json(void){
+    nlohmann::json j;
+
+    j["computer_playing"] = game_settings.computer_playing;
+    j["engine_timeout"] = game_settings.engine_timeout;
+    j["engine_strength"] = game_settings.engine_strength;
+    assert(game_settings.side == 0 || game_settings.side == 1);
+    j["side"] = game_settings.side == 0? "black": "white";
+    
+    std::string s = j.dump();           
+    socket_send_string(const_cast<char*>(s.c_str()), s.size());
+}
+
 static void confirm_button_cb(lv_event_t* e){
-    //lv_obj_t * button = lv_event_get_target_obj(e);
     lv_event_code_t code = lv_event_get_code(e);
-    char* buf = "hello";
-    int len = 6;
+    // char* buf = "hello";
+    // int len = 6;
     if(code == LV_EVENT_CLICKED) { 
         /* socket send */
-        socket_send_string(buf, len);
-
-
+        //socket_send_string(buf, len);
+        send_json();
         /* hide menu*/
-        lv_obj_t* menu = (lv_obj_t *)lv_event_get_user_data(e);
-        lv_obj_add_flag(menu, LV_OBJ_FLAG_HIDDEN);
-
+        lv_obj_add_flag(settings_menu, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
