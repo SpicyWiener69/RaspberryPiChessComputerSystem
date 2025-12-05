@@ -1,24 +1,9 @@
-# LVGL on top of Linux graphics stack
-
-This is an example project demonstrating how to use LVGL on
-a GNU/Linux systems and other Unix-like operating systems
-
+# Chess UI on top of LVGL
 LVGL provides drivers for many graphics backends.
 Legacy framebuffer (fbdev), modern DRM/KMS, Wayland, X11, GLFW3 and SDL2.
 
 Check out this blog post for a step by step tutorial for fbdev
 https://blog.lvgl.io/2018-01-03/linux_fb
-
-## Clone the project
-
-Clone the project
-
-```
-git clone --recurse-submodules git@github.com:SpicyWiener69/lv_port_linux.git
-cd lv_port_linux/
-```
-
-
 
 ## Configure drivers and libraries
 
@@ -36,24 +21,6 @@ cmake -B build -DCONFIG=<config_name>
 
 With `<config_name>` the name of the config without the `.defaults` extension, eg: `configs/wayland.defaults` becomes `wayland`.
 
-### Graphics drivers
-
-| Definition         | Description                             |
-| ------------------ | ----------------------------------------|
-| LV_USE_LINUX_FBDEV | Legacy frame buffer (/dev/fb*)          |
-| LV_USE_LINUX_DRM   | DRM/KMS (/dev/dri/*)                    |
-| LV_USE_SDL         | SDL                                     |
-| LV_USE_WAYLAND     | WAYLAND                                 |
-| LV_USE_X11         | X11                                     |
-| LV_USE_GLFW        | GLFW3                                   |
-
-### Device drivers
-
-| Definition         | Description                             |
-| ------------------ | ----------------------------------------|
-| LV_USE_EVDEV       | libevdev input devices                  |
-| LV_USE_LIBINPUT    | libinput input devices                  |
-
 ## Install dependencies
 
 Be sure to install the required dependencies for the selected drivers by checking
@@ -65,8 +32,6 @@ of the packages for various distributions
 
 ## Build instructions
 
-LVGL supports GNU make and CMake
-
 ### CMake
 
 ```
@@ -74,32 +39,11 @@ cmake -B build
 cmake --build build -j$(nproc)
 ```
 
-Cross compilation is supported with CMake, edit the `user_cross_compile_setup.cmake`
-to set the location of the compiler toolchain and build using the commands below
-
-```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=./user_cross_compile_setup.cmake 
-cmake --build build -j$(nproc)
-```
-
-### Installing LVGL
-
-
 ## Run the chess UI application
 
 ```
 ./build/bin/lvglsim
 ```
-
-
-If multiple backends are enabled you can run with a specific backend via the `-b` option
-
-```
-./build/bin/lvglsim -b sdl
-```
-
-To get a list of supported backends use the `-B` option
-
 
 ## Environment variables
 
@@ -132,9 +76,3 @@ Check the documentation of the drivers for more details
 
 By default, unpriviledged users don't have access to the framebuffer device `/dev/fb0`. In such cases, you can either run the application
 with `sudo` privileges or you can grant access to the `video` group.
-
-```bash
-sudo adduser $USER video
-newgrp video
-./build/bin/lvglsim
-```
