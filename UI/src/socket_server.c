@@ -30,7 +30,7 @@ static int set_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-void socket_send_string(char* buf, int len){
+void socket_send_string(const char* buf, int len){
     send(client_fd, buf, len, 0);
 }
 

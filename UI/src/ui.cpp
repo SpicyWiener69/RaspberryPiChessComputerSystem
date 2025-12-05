@@ -2,7 +2,7 @@
 #include "ui.h"
 #include "nlohmann/json.hpp"
 
-#include "src/assets/assets.h"
+#include "assets.h"
 #include "socket_server.h"
 
 #include <string>
@@ -12,13 +12,10 @@
 
 
 
-//TODO?: getter function for globals
-
 /* === STATIC VARIABLES ============================ */
 static lv_obj_t* board_container = nullptr;
 static lv_obj_t* settings_menu = nullptr;
 static lv_obj_t* screen = nullptr;
-static lv_obj_t* button_container = nullptr;
 static lv_obj_t* warning_ui = nullptr;
 
 /*default game settings*/
@@ -41,7 +38,6 @@ namespace UiDim{
     Vec2 settings_ui = {400,450};
     Vec2 settings_button = {100,80};
     Vec2 start_button = settings_button;
-
 };
 
 
@@ -51,15 +47,15 @@ void warning_ui_toggle(bool show);
 
 
 /* === GRID UI INTERNAL FUNCTIONS ============================ */
-static void board_grid_ui(void);
+static void board_grid_ui_init(void);
 static std::vector<std::string> split(const std::string& s, char delim);
 static const lv_image_dsc_t* piece_picker(char piece);
 static void draw_on_grid(lv_obj_t* board_container,const lv_image_dsc_t* src, int col, int row);
 
 
 /* === MENU UI INTERNAL FUNCTIONS ============================ */
-static void chess_settings_menu_ui(void);
-static void open_menu_ui(void);
+static void setting_menu_ui_init(void);
+static void button_ui_init(void);
 
 static void init_label_with_int(lv_obj_t* label, int value, const char* fmt);
 
@@ -69,7 +65,7 @@ static void engine_enable_sw_cb(lv_event_t* e);
 static void engine_elo_slider_cb(lv_event_t * e);
 static void engine_time_slider_cb(lv_event_t * e);
 static void computer_side_sw_cb(lv_event_t* e);
-static void confirm_button_cb(lv_event_t* e);
+static void game_state_cb(lv_event_t* e);
 
 /* main page button cb */
 static void menu_open_cb(lv_event_t* e);
@@ -84,12 +80,11 @@ void init_ui(void){
     
     board_container = lv_obj_create(screen);
     settings_menu = lv_menu_create(screen);
-    //button_container = lv_button_create(screen);
     warning_ui = lv_obj_create(screen);
 
-    board_grid_ui();
-    open_menu_ui();
-    chess_settings_menu_ui();
+    board_grid_ui_init();
+    button_ui_init();
+    setting_menu_ui_init();
     warning_ui_init();
 }
 
@@ -117,7 +112,7 @@ void warning_ui_toggle(bool show){
 /* === GRID UI ========================== */
 /* ======================================== */
 
-void board_grid_ui(void){
+void board_grid_ui_init(void){
     lv_obj_t* cont = board_container;
     static int32_t col_dsc[] = { LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1),
         LV_GRID_FR(1),  LV_GRID_FR(1),  LV_GRID_FR(1),LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -264,14 +259,7 @@ static void draw_on_grid(lv_obj_t* cont,const lv_image_dsc_t* src, int col, int 
 /* ======================================== */
 
 
-void open_menu_ui(void){
-    //lv_obj_t* button = lv_button_create(lv_screen_active());
-    // lv_obj_t* cont = button_container;
-    // lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, -12);
-    // lv_obj_set_size(cont,330,90);
-    // lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);       // remove background
-    // lv_obj_set_style_border_width(cont, 0, 0);            // remove border
-    
+void button_ui_init(void){
     lv_obj_t* label;
 
     lv_obj_t* settings_button = lv_button_create(screen);
@@ -286,10 +274,11 @@ void open_menu_ui(void){
     lv_obj_align(start_button, LV_ALIGN_TOP_MID, -90, -12);
     lv_obj_set_size(start_button,UiDim::start_button.x,UiDim::start_button.y);
     label = lv_label_create(start_button);     
-    lv_label_set_text(label, "start button");              
+    lv_obj_add_flag(start_button, LV_OBJ_FLAG_CHECKABLE); 
+    lv_label_set_text(label, "START");              
     lv_obj_center(label);
-    lv_obj_add_event_cb(start_button,confirm_button_cb,LV_EVENT_CLICKED,NULL);
-
+    lv_obj_add_event_cb(start_button,game_state_cb,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_set_user_data(start_button, label);
 }
 
 
@@ -305,7 +294,7 @@ static void menu_open_cb(lv_event_t* e){
 }
 
 
-void chess_settings_menu_ui(void){   
+void setting_menu_ui_init(void){   
     /*Create a menu object*/
     //menu = lv_menu_create(lv_screen_active());
     
@@ -446,21 +435,22 @@ static void engine_elo_slider_cb(lv_event_t * e){
     lv_obj_t* elo_label = (lv_obj_t*)lv_obj_get_user_data(slider);
     int elo = (int)lv_slider_get_value(slider);
     if (!elo_label) return;
+    game_settings.engine_strength = elo;
     init_label_with_int(elo_label,elo,"%d ELO");
 }
 
 static void engine_time_slider_cb(lv_event_t * e){   
     lv_obj_t* slider = lv_event_get_target_obj(e);
     lv_obj_t* time_label = (lv_obj_t*)lv_obj_get_user_data(slider);
-    int elo = (int)lv_slider_get_value(slider);
+    int time = (int)lv_slider_get_value(slider);
     if (!time_label) return;
-    init_label_with_int(time_label,elo,"%d s");
+    game_settings.engine_timeout = time;
+    init_label_with_int(time_label,time,"%d s");
 }
 
 
 static void computer_side_sw_cb(lv_event_t* e){
     lv_obj_t * sw = lv_event_get_target_obj(e);
-    
     lv_obj_t* side_label = (lv_obj_t *)lv_obj_get_user_data(sw);
     if (!side_label) return;
     if (lv_obj_has_state(sw, LV_STATE_CHECKED)){
@@ -482,20 +472,26 @@ static void send_json(void){
     assert(game_settings.side == 0 || game_settings.side == 1);
     j["side"] = game_settings.side == 0? "black": "white";
     
-    std::string s = j.dump();           
+    std::string command = "start;";
+    std::string message = j.dump();
+    std::string s = command + message;           
     socket_send_string(const_cast<char*>(s.c_str()), s.size());
 }
 
-static void confirm_button_cb(lv_event_t* e){
-    lv_event_code_t code = lv_event_get_code(e);
-    // char* buf = "hello";
-    // int len = 6;
-    if(code == LV_EVENT_CLICKED) { 
-        /* socket send */
-        //socket_send_string(buf, len);
+static void game_state_cb(lv_event_t* e){
+//    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t * btn = lv_event_get_target_obj(e);
+    lv_obj_t* label =  (lv_obj_t *)lv_obj_get_user_data(btn);
+    
+    if(lv_obj_has_state(btn, LV_STATE_CHECKED)) {
+        lv_label_set_text(label, "RESET");
         send_json();
-        /* hide menu*/
-        lv_obj_add_flag(settings_menu, LV_OBJ_FLAG_HIDDEN);
+
+    } else {
+        lv_label_set_text(label, "START");
+        std::string s = "reset;";
+        const char* b = "reset;";
+        socket_send_string(b,6);
     }
 }
 
