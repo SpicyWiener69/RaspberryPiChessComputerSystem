@@ -1,0 +1,14 @@
+asttokens==3.0.0
+chess==1.11.2
+colorama==0.4.6
+evdev==1.9.2
+executing==2.2.1
+icecream==2.1.8
+numpy==2.3.4
+Pygments==2.19.2
+pynput==1.8.1
+python-xlib==0.33
+RPi.GPIO==0.7.1
+six==1.17.0
+spidev==3.8
+sshkeyboard==2.3.1
