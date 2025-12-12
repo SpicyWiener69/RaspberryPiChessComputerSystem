@@ -4,7 +4,8 @@ import queue
 import numpy as np
 import subprocess
 import json
-from dataclasses import dataclass, field
+from enum import Enum
+#from dataclasses import dataclass, field
 
 import chess
 import chess.engine
@@ -16,8 +17,6 @@ from BoardSensorArray import BoardSensorArray
 from board_event_handler import BoardEvent, board_uci_move_handler
 from socket_client import Socket, wait_unix_socket
 
-from enum import Enum
-
 
 class Game:
     
@@ -28,25 +27,23 @@ class Game:
         SETUP = 4
         QUIT = 5
         RESET = 6
+        IDLE = 7
         
     def __init__(self):
-        #setup state
-        #self.computer_timeout = 3
-        #self.elo = 2000
-
+        self.game_state = Game.GameState.IDLE
     
-        self.game_state = Game.GameState.SETUP
-    
-        #game context
-        self.context:dict = {
-            
+        #game setup
+        self.game_setup:dict = {
+            "computer_playing":None,"engine_strength":None,"engine_timeout":None,"side":None
         }
-        self.is_game_running: bool = True
+
+        #game context
+        #self.is_game_running: bool = True
         self.turn:str =  "white"
-        self.Computer_playing:bool = True
-        self.Computer_side:str = "white"
         self.board = chess.Board()
         self.board_events:list = []
+
+
         self.update_display_flag:bool = False
         
         self.STOCKFISH_PATH = "/usr/games/stockfish"
@@ -59,11 +56,10 @@ class Game:
         self.running_all_threads.set()
 
         '''
-        Top level class Game owns GPIO. Responsible for cleanup.
+        Top level class "Game" owns GPIO. Responsible for cleanup.
         '''
         self.GPIO = GPIO
         self.GPIO.setmode(GPIO.BOARD)    
-        
         self.board_queue = queue.Queue()
         self.keyboard_queue = queue.Queue()
         self.gui_input_message_queue = queue.Queue()
@@ -84,13 +80,12 @@ class Game:
     def run(self):
         #self.board.push(chess.Move.from_uci("d2d4"))
         while True:
-            #handle gui input logic
             self.HandleGameLogic()
             self.HandleDisplayLogic()
 
             time.sleep(0.03)
     
-    def switch_turn(self):
+    def _switch_turn(self):
         assert self.turn == "white" or "black"
         
         if self.turn == "white":
@@ -98,12 +93,12 @@ class Game:
         else:
             self.turn = "white"
     
-    def HandleTouchInput():
-        message_json:json = self.PollQueue(self.keyboard_queue)
-        message = json.loads(message_json)
+    # def HandleTouchInput(self):
+    #     message_json:json = self.PollQueue(self.keyboard_queue)
+    #     message = json.loads(message_json)
         
-        print(message)
-        pass
+    #     print(message)
+    #     pass
         
     def HandleComputerInput(self):
         #TODO: interface with stockfish
@@ -111,16 +106,30 @@ class Game:
         result = self.engine.play(self.board, chess.engine.Limit(time=2)) 
         print("Stockfish move:", result.move)
         self.board.push(result.move)
-        self.FetchNextPlayer()
-        self.switch_turn()
         self.update_display_flag = True
+        return self.FetchNextPlayer()
+
+    def HandleGuiInput(self):
+        msg:str = self.PollQueue(self.gui_input_message_queue)
+        if msg:
+            prefix, json_str = msg.split(";", 1)
+            if prefix == "start":
+                try:
+                    self.game_setup = json.loads(json_str)
+                    print("game setup:", self.game_setup)
+                    print("starting game...")
+                    return self.FetchNextPlayer()
+                except json.JSONDecodeError as e:
+                    print("Invalid JSON:", e)
+
+            elif prefix == "reset":
+                return Game.GameState.RESET
+
+        return None
     
-    def HandleSetup(self):
-        
-        key:str = self.PollQueue(self.keyboard_queue)
-        if key == 'start':
-            self.FetchNextPlayer()
-        
+    def HandleIdle(self):
+        return Game.GameState.IDLE
+    
     @staticmethod
     def PollQueue(queue):
         if not queue.empty():
@@ -129,36 +138,37 @@ class Game:
             return None
     
     def FetchNextPlayer(self):
-        if self.Computer_playing:
-            if self.turn == self.Computer_side:
-                self.game_state = Game.GameState.WAIT_COMPUTER_INPUT
+        if self.game_setup["computer_playing"]:
+            if self.turn == self.game_setup["side"]:
+                next = Game.GameState.WAIT_COMPUTER_INPUT
             else:
-                self.game_state = Game.GameState.WAIT_HUMAN_INPUT
+                next = Game.GameState.WAIT_HUMAN_INPUT
         else:
-            self.game_state = Game.GameState.WAIT_HUMAN_INPUT
-
-        self.switch_turn()
+            next = Game.GameState.WAIT_HUMAN_INPUT
+        self._switch_turn()
+        return next
     
     def HandleHumanRetry(self):
         self.sensor_put_queue.clear()
         key:str = self.PollQueue(self.keyboard_queue)
         if key == 'quit':
-            self.game_state = Game.GameState.QUIT
-            return
+            
+            return Game.GameState.QUIT
             #if self.game_state == GameState.WAIT_HUMAN_RETRY:
         print("await retry:")
         if key == 'completed action':
-            self.game_state = Game.GameState.WAIT_HUMAN_INPUT
+            return Game.GameState.WAIT_HUMAN_INPUT
 
+        return Game.GameState.WAIT_HUMAN_RETRY
 
     def HandleHumanInput(self):
         self.sensor_put_queue.set()
         new_action = self.PollQueue(self.board_queue)
         key:str = self.PollQueue(self.keyboard_queue)
         
-        if key == 'quit':
-            self.game_state = Game.GameState.QUIT
-            return 
+        # if key == 'quit':
+        #     self.game_state = Game.GameState.QUIT
+        #     return 
         
         if new_action:
             print(f'new move {new_action}')
@@ -168,42 +178,60 @@ class Game:
             print('ff')
             success,uci_moves = board_uci_move_handler(self.board_events,self.board)
             if success:
-                self.switch_turn()
                 self.update_display_flag = True
                 print(self.board)
                 print('_________')
                 print(uci_moves)
-                self.FetchNextPlayer()
+                next = self.FetchNextPlayer()
+                
             else:
-                self.game_state = Game.GameState.WAIT_HUMAN_RETRY
                 self.update_display_flag = False
                 print('retry move')
+                next =  Game.GameState.WAIT_HUMAN_RETRY
                 
             #reset the actions buffer
             self.board_events = []
+            return next
         
+        return Game.GameState.WAIT_HUMAN_INPUT
+    
     def HandleGameLogic(self):
-        if self.game_state == Game.GameState.SETUP:
-            self.HandleSetup()
+        prev_state = self.game_state 
+
+        gui_msg = self.HandleGuiInput()
+        if gui_msg:
+            self.game_state = gui_msg
+
+        if self.game_state == Game.GameState.IDLE:
+            nextstate = self.HandleIdle()
         elif self.game_state == Game.GameState.WAIT_HUMAN_INPUT:
-            self.HandleHumanInput()
+            nextstate = self.HandleHumanInput()
         elif self.game_state == Game.GameState.WAIT_COMPUTER_INPUT:
-            self.HandleComputerInput()
+            nextstate = self.HandleComputerInput()
         elif self.game_state == Game.GameState.WAIT_HUMAN_RETRY:
-            self.HandleHumanRetry()
+            nextstate = self.HandleHumanRetry()
         elif self.game_state == Game.GameState.RESET:
-            self.HandleReset()
+            nextstate = self.HandleReset()
         elif self.game_state == Game.GameState.QUIT:
-            self.HandleQuit()
+            nextstate = self.HandleQuit()
         else:
             raise ValueError(f"Invalid game state: {self.game_state}")
-            
+        
+        self.game_state = nextstate 
+        if prev_state != nextstate:
+            print(f"next game state:{nextstate} ")
+
     def HandleDisplayLogic(self):
         if self.update_display_flag:
             self.update_display_flag = False
             fen:str = self.board.fen()
-            #cuts fen to only boardstate representation
-            output:str = fen.split(' ')[0]    
+            '''
+            sends the following string:
+                "fen;"+  boardstate representation.
+            for example:
+                fen;rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR
+            '''
+            output:str = "fen;" + fen.split(' ')[0]    
             self.gui_output_message_queue.put(output)
     
     def HandleQuit(self):
@@ -215,15 +243,19 @@ class Game:
         self.GPIO.cleanup()
         exit(0)
     
-    def HandleReset():
-        self.game_state = HandleSetup()
-        pass
+    def HandleReset(self):
+        self.turn:str =  "white"
+        self.gui_output_message_queue.put("fen;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+        self.board.reset()
+        self.board_events:list = []
+
+        return Game.GameState.IDLE
     
 def GuiWorker(socket_path:str,running,input_queue,output_queue):
     
-    #launch the C GUI program
+    #launch the Cpp GUI program
     server_process = subprocess.Popen(
-    ["../lv_port_linux/build/bin/lvglsim"],  
+    ["./UI/build/bin/lvglsim"],  
     stdout=subprocess.PIPE,  
     stderr=subprocess.PIPE
     )
@@ -235,9 +267,8 @@ def GuiWorker(socket_path:str,running,input_queue,output_queue):
             #handle inputs
             string  = sock.read_as_str()
             if string:
-                input_queue.put(data)
-            
-            #handle_outbound requests
+                input_queue.put(string)
+
             try:
                 outbound = output_queue.get(False)
                 print(f'writing outbound:{outbound}')
@@ -289,6 +320,7 @@ def board_array_to_uci(prev_array,new_array) -> BoardEvent:
     #if count is not 1(magnets may be between board sensors) ignore.
     if np.count_nonzero(diff) != 1:
         return None
+    
     x,y = np.where(diff != 0)
     x,y = int(x[0]),int(y[0])
     
@@ -306,13 +338,13 @@ def board_array_to_uci(prev_array,new_array) -> BoardEvent:
     print(board_event)
     return board_event
    
-#TODO: replace with 2 GPIO buttons PULLUP on each size of chessboard
+#TODO: replace with 2 GPIO buttons PULLUP on each side of chessboard
 def KeyboardWorker(key:str,output_queue):
     '''
     parameter: str: key from terminal
     returns: None
     Stops the main thread from sampling from Chessboard
-    signaling flag for completion in main thread: type None
+    signaling flag for completion in main thread: None
     '''
     if key == 'z':
         print('complete action')
@@ -321,9 +353,9 @@ def KeyboardWorker(key:str,output_queue):
     elif key == 'q':
         output_queue.put('quit')
     
-    elif key == 'x':
-        print("starting game...")
-        output_queue.put('start')
+    # elif key == 'x':
+    #     print("starting game...")
+    #     output_queue.put('start')
         
 if __name__ == "__main__":
     chess_game = Game()

@@ -32,7 +32,7 @@ class Socket:
         try:
             data = self.sock.recv(1024)
             if data:
-                return str(data)
+                return str(data,"utf-8")
         except BlockingIOError:
             # No data available yet
             pass
