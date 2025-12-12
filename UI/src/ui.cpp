@@ -454,12 +454,12 @@ static void computer_side_sw_cb(lv_event_t* e){
     lv_obj_t* side_label = (lv_obj_t *)lv_obj_get_user_data(sw);
     if (!side_label) return;
     if (lv_obj_has_state(sw, LV_STATE_CHECKED)){
-        game_settings.side = 0;
-        lv_label_set_text(side_label, "Black");
-    }
-    else{
         game_settings.side = 1;
         lv_label_set_text(side_label, "White");
+    }
+    else{
+        game_settings.side = 0;
+        lv_label_set_text(side_label, "Black");
     }
 }
 

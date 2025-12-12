@@ -8,7 +8,7 @@ from enum import Enum
 #from dataclasses import dataclass, field
 
 import chess
-import chess.engine
+import chess.engine 
 
 from sshkeyboard import listen_keyboard
 import RPi.GPIO as GPIO
