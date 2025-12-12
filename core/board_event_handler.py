@@ -1,7 +1,6 @@
 import chess
-import itertools
 from icecream import ic
-
+import numpy as np
 
 class BoardEvent:
     def __init__(self, enabled:bool, coordinate: str):
@@ -30,13 +29,53 @@ def board_uci_move_handler(events_list,board:chess.Board) -> tuple:
         promotion = check_promotion(events_list,board)
         if promotion:
             uci_moves += promotion
-
-    move = chess.Move.from_uci(uci_moves)
+    try:
+        move = chess.Move.from_uci(uci_moves)
+    except chess.InvalidMoveError:
+        ic(f"Illegal move: {uci_moves}")
+        return (0,uci_moves)
+    
     if move in board.legal_moves:
         board.push(move)
         return (1, uci_moves)
     ic(f"Illegal move: {uci_moves}")
     return (0,uci_moves)
+
+
+def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEvent:
+    '''
+    Compute the difference between two 8x8 board arrays and return as a BoardEvent.
+    
+    parameters: 
+        prev_array,new_array: 2d numpy array of size 8*8 
+    
+    returns: 
+        the difference of the two arrays, converted to type:event
+    '''
+    #assert prev_array.shape == (8,8)
+    #assert new_array.shape == (8,8)
+    diff = np.subtract(new_array,prev_array)
+    
+    #count the difference of between two scannings.
+    #if count is not 1(magnets may be between board sensors) ignore.
+    if np.count_nonzero(diff) != 1:
+        return None
+    
+    x,y = np.where(diff != 0)
+    x,y = int(x[0]),int(y[0])
+    
+    num:int = 8 - x
+    alphabet_conversion:dict = {0:'a',1:'b',2:'c',3:'d',4:'e',5:'f',6:'g',7:'h'} 
+    abcdefgh:str = alphabet_conversion[y]
+    #print(f'coordinate {abcdefgh}{num}')
+    
+    coordinate:str = f'{abcdefgh}{num}'
+    if 1 in diff:
+        enable_flag = True
+    else:
+        enable_flag = False
+    board_event = BoardEvent(enable_flag,coordinate)
+    return board_event
 
 
 def handle_move(events_list) -> str:
