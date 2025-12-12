@@ -3,10 +3,10 @@
 ## Folder Descriptions
 ```
 .
-├── UI:    Chess UI frontend. Allows players to adjust game settings.
-├── core:  program entry point. Handles game logic.
-├── ChessBoardPCB: A PCB board with hall effect sensors designed to sense the position of a chess game.     
-└── hardware: BOM, 3d design files of the system 
+├── UI/:    Chess UI frontend. Allows players to adjust game settings.
+├── core/:  program entry point. Handles game logic.
+├── ChessBoardPCB/: A PCB board with hall effect sensors designed to sense the position of a chess game.     
+└── hardware/: BOM, 3d design files of the system 
 ```
 
 ## setup the python env:
@@ -25,7 +25,7 @@ source venv/bin/activate
 ```
 Install Dependencies
 ```
-pip install -r core/requirements.txt
+pip install -r requirements.txt
 ```
 
 

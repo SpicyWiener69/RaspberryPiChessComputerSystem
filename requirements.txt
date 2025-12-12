@@ -8,7 +8,7 @@ numpy==2.3.4
 Pygments==2.19.2
 pynput==1.8.1
 python-xlib==0.33
-RPi.GPIO==0.7.1
 six==1.17.0
 spidev==3.8
 sshkeyboard==2.3.1
+lgpio==0.2.2.0
