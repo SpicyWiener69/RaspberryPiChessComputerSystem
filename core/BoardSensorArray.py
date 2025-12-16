@@ -20,10 +20,10 @@ import atexit
     chip enable GPIO pin shown below:
 
 
-    ♜♞♝♛♚♝♞♜  top  -> 
+    ♜♞♝♛♚♝♞♜  top  -> 40
     ♟♟♟♟♟♟♟♟
 
-    ▒█▒█▒█▒█         midtop ->
+    ▒█▒█▒█▒█         midtop -> 38
     █▒█▒█▒█▒
 
     ▒█▒█▒█▒█         midbottom -> 33
@@ -35,9 +35,9 @@ import atexit
 
 '''
 class BoardSensorArray:   
-   # CS_PIN_BANK = [BOTTOM_CS_PIN, MIDBOTTOM_CS_PIN]
-    MCP_INSTANCES = ['MIDBOTTOM_CS_PIN','BOTTOM_CS_PIN']
-    CS_PIN_BANK = [33,37]
+
+    MCP_INSTANCES = ['BOTTOM_CS_PIN', 'MIDBOTTOM_CS_PIN', 'MIDTOP_CS_PIN', 'TOP_CS_PIN']
+    CS_PIN_BANK = [37,33,38,40]
 
     def __init__(self,GPIO):
         self.GPIO = GPIO
@@ -49,17 +49,10 @@ class BoardSensorArray:
         for name,pin in zip(BoardSensorArray.MCP_INSTANCES, BoardSensorArray.CS_PIN_BANK):
             self.MCP23S17_dict[name] = MCP23S17(name,self.spi_bus,GPIO,pin_cs=pin)
 
-        #self.mcp1 = MCP23S17(self.spi_bus,GPIO,pin_cs=37)
-        #self.mcp2 = MCP23S17(self.spi_bus,GPIO,pin_cs=33)
-        
-
         # cs_Pin setup. all GPIO must be set to high before writing to any 
         # registers to prevent rewriting the same mcp23s17 device.
         for inst in self.MCP23S17_dict.values():
             inst.setupGPIO()
-    
-        #self.mcp1.setupGPIO()
-        #self.mcp2.setupGPIO()
         
         for inst in self.MCP23S17_dict.values():
             inst.init_MCP23S17()
@@ -90,8 +83,8 @@ class BoardSensorArray:
         h2 = 1 - ((bits >> 15) & 1)
 
         return [
-            [a2,b2,c2,d2,e2,f2,g2,h2],
-            [a1,b1,c1,d1,e1,f1,g1,h1]
+            [h2,g2,f2,e2,d2,c2,b2,a2],
+            [h1,g1,f1,e1,d1,c1,b1,a1]
         ]
                 
     def _read_all(self)->np.array:
@@ -103,6 +96,14 @@ class BoardSensorArray:
             result.extend(quarter_board)
         return np.array(result)
     
+    def pretty_print(self, array) -> None:
+        print("-------------------")
+        printed = np.flipud(array)
+        for row in printed:
+            print(" ".join(map(str, row)))
+
+        print("-------------------")
+
     def _read_MCP23S17(self,mcp_instance):
         state = mcp_instance.readGPIO()
         quarter_board = self._bits_2_board_mapping(state)
@@ -111,21 +112,6 @@ class BoardSensorArray:
     def close_spi(self):
         self.spi_bus.close()
     
-# def test_MCP23S17():
-#     mcp = MCP23S17(device_id=0x00,gpio = GPIO)
-#     mcp.open_spi_bus()
-
-#     for x in range(16):
-#         mcp.setDirection(x, mcp.DIR_INPUT)
-#         mcp.setPullupMode(x,mcp.PULLUP_DISABLED)
-    
-#     while True:
-#         print(mcp.readGPIO())
-#         time.sleep(1)
-
-#     mcp.close()
-    
-
 
 if __name__ == "__main__":
     import RPi.GPIO as GPIO
@@ -136,13 +122,11 @@ if __name__ == "__main__":
     board_sensor_array = BoardSensorArray(GPIO=GPIO) 
     try:
         while True:
-            results = board_sensor_array._read_all()
-            # for sublist in reversed(results):
-               #  print(sublist)
-            print(results)
-				
+            results = board_sensor_array._read_all()            
+            board_sensor_array.pretty_print(results)
+
             time.sleep(1)
-			
+
     except KeyboardInterrupt:
         print("closing...")
         GPIO.cleanup()

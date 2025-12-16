@@ -64,7 +64,7 @@ def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEv
     x,y = np.where(diff != 0)
     x,y = int(x[0]),int(y[0])
     
-    num:int = 8 - x
+    num:int = x + 1
     alphabet_conversion:dict = {0:'a',1:'b',2:'c',3:'d',4:'e',5:'f',6:'g',7:'h'} 
     abcdefgh:str = alphabet_conversion[y]
     #print(f'coordinate {abcdefgh}{num}')
