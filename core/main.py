@@ -1,6 +1,7 @@
 import time
 import threading
-import queue
+from threading import Event
+from queue import Queue, Empty
 import subprocess
 import json
 import stat
@@ -14,28 +15,29 @@ import chess.engine
 from sshkeyboard import listen_keyboard
 import RPi.GPIO as GPIO
 
-from BoardSensorArray import BoardSensorArray
+from board_sensor_array import BoardSensorArray
 from board_event_handler import BoardEvent, board_uci_move_handler, diff_board_array_to_event
 from socket_client import Socket, wait_unix_socket
-
+from gpio_definition import BoardPin
 
 class Game:
     
     class GameState(Enum):
         WAIT_HUMAN_INPUT = 1
-        WAIT_HUMAN_RETRY = 2
+        WAIT_RETRY_MOVE_CONFIRM = 2
         WAIT_COMPUTER_INPUT = 3
         SETUP = 4
         QUIT = 5
         RESET = 6
         IDLE = 7
+        WAIT_MANUAL_FOR_COMPUTER = 8
         
     def __init__(self):
         self.game_state = Game.GameState.IDLE
     
         #game setup
         self.game_setup:dict = {
-            "computer_playing":None,"engine_strength":None,"engine_timeout":None,"side":None
+            "computer_playing":None,"engine_strength":None,"engine_timeout":None,"side":None, "auto_moving":None
         }
 
         #game context
@@ -58,10 +60,10 @@ class Game:
         '''
         self.GPIO = GPIO
         self.GPIO.setmode(GPIO.BOARD)    
-        self.board_queue = queue.Queue()
-        self.keyboard_queue = queue.Queue()
-        self.gui_input_message_queue = queue.Queue()
-        self.gui_output_message_queue = queue.Queue()
+        self.board_queue = Queue()
+        self.keyboard_queue = Queue()
+        self.gui_input_message_queue = Queue()
+        self.gui_output_message_queue = Queue()
         
         self.Board_array_node = threading.Thread(target=BoardArrayWorker,args=(self.GPIO,self.running_all_threads,self.sensor_put_queue,self.board_queue),daemon=False)
         
@@ -96,6 +98,9 @@ class Game:
         print("Stockfish move:", result.move)
         self.board.push(result.move)
         self.update_display_flag = True
+        if self.game_setup["auto_moving"] is False:
+            return Game.GameState.WAIT_MANUAL_FOR_COMPUTER
+
         return self.FetchNextPlayer()
 
 
@@ -106,6 +111,10 @@ class Game:
             if prefix == "start":
                 try:
                     self.game_setup = json.loads(json_str)
+
+                    #    &&&&dependency injec
+                    self.game_setup["auto_moving"] = False
+
                     print("game setup: ", self.game_setup)
                     self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo":self.game_setup["engine_strength"]})
                     print("starting game...")
@@ -132,6 +141,9 @@ class Game:
     
 
     def FetchNextPlayer(self):
+        '''
+        Depending on gamemode, return the correct next "player"
+        '''
         if self.game_setup["computer_playing"]:
             if self.turn == self.game_setup["side"]:
                 next = Game.GameState.WAIT_COMPUTER_INPUT
@@ -142,9 +154,20 @@ class Game:
         self._switch_turn()
         return next
     
+    def WaitManualMoveForComputer(self):
+        '''
+        In absence of the automover xy system, this function will be called to for human 
+        to move for the computer.
+        '''
+        #assert self.game_setup["auto_moving"] is False
+        key:str = self.PollQueue(self.keyboard_queue)
+        if key == 'completed action':
+            return self.FetchNextPlayer()
+        return Game.GameState.WAIT_MANUAL_FOR_COMPUTER
 
-    def HandleHumanRetry(self):
-        self.sensor_put_queue.clear()
+
+    def HandleRetryConfirm(self):
+        #self.sensor_put_queue.clear()
         key:str = self.PollQueue(self.keyboard_queue)
         if key == 'quit':
             return Game.GameState.QUIT
@@ -152,7 +175,7 @@ class Game:
         if key == 'completed action':
             return Game.GameState.WAIT_HUMAN_INPUT
 
-        return Game.GameState.WAIT_HUMAN_RETRY
+        return Game.GameState.WAIT_RETRY_MOVE_CONFIRM
 
 
     def HandleHumanInput(self):
@@ -163,8 +186,9 @@ class Game:
         if new_action:
             print(f'new move {new_action}')
             self.board_events.append(new_action)
-        
+
         if key == 'completed action' and len(self.board_events) > 1:
+            self.sensor_put_queue.clear()
             print('parsing move:')
             success,uci_moves = board_uci_move_handler(self.board_events,self.board)
             if success:
@@ -177,7 +201,7 @@ class Game:
             else:
                 self.update_display_flag = False
                 print('retry move')
-                next =  Game.GameState.WAIT_HUMAN_RETRY
+                next =  Game.GameState.WAIT_RETRY_MOVE_CONFIRM
                 
             #reset the actions buffer
             self.board_events = []
@@ -199,12 +223,14 @@ class Game:
             nextstate = self.HandleHumanInput()
         elif self.game_state == Game.GameState.WAIT_COMPUTER_INPUT:
             nextstate = self.HandleComputerInput()
-        elif self.game_state == Game.GameState.WAIT_HUMAN_RETRY:
-            nextstate = self.HandleHumanRetry()
+        elif self.game_state == Game.GameState.WAIT_RETRY_MOVE_CONFIRM:
+            nextstate = self.HandleRetryConfirm()
         elif self.game_state == Game.GameState.RESET:
             nextstate = self.HandleReset()
         elif self.game_state == Game.GameState.QUIT:
             nextstate = self.HandleQuit()
+        elif self.game_state == Game.GameState.WAIT_MANUAL_FOR_COMPUTER:
+            nextstate = self.WaitManualMoveForComputer()
         else:
             raise ValueError(f"Invalid game state: {self.game_state}")
         
@@ -270,7 +296,7 @@ def GuiWorker(socket_path:str,running,input_queue,output_queue):
                 outbound = output_queue.get(False)
                 print(f'writing outbound:{outbound}')
                 sock.write(outbound)
-            except queue.Empty:
+            except Empty:
                 continue
             
             time.sleep(0.03)
@@ -278,10 +304,10 @@ def GuiWorker(socket_path:str,running,input_queue,output_queue):
         sock.write('quit')
         
         
-def BoardArrayWorker(GPIO,running,push_to_queue,output_queue,poll_interval=0.03):
+def BoardArrayWorker(GPIO,running:Event,push_to_queue,output_queue,poll_interval=0.03):
     '''
-    thread Owns BoardSensorArray which owns the SPI bus. Is responsible for SPI cleanup.
-    
+    thread Owns BoardSensorArray which owns the SPI bus +  4x cs pin. Is responsible for SPI cleanup.
+
     '''
     board_sensor_array = BoardSensorArray(GPIO=GPIO)
     prev_board_value = board_sensor_array._read_all()
@@ -299,8 +325,22 @@ def BoardArrayWorker(GPIO,running,push_to_queue,output_queue,poll_interval=0.03)
     
     
     board_sensor_array.close_spi()
-    
-   
+
+def ButtonWorker(GPIO:GPIO,queue:Queue,running:Event):
+    GPIO.add_event_detect(BoardPin.white_button, GPIO.RISING)  
+    GPIO.add_event_detect(BoardPin.black_button, GPIO.RISING)
+    while running.is_set():
+        inst = [None] * 2
+        if GPIO.event_detected(BoardPin.white_button):
+            inst[0] = True
+            update = True
+        if GPIO.event_detected(BoardPin.white_button):
+            inst[1] = True
+            update = True
+        if update:
+            queue.put(inst)
+
+
 #TODO: replace with 2 GPIO buttons PULLUP on each side of chessboard
 def KeyboardWorker(key:str,output_queue):
     '''
@@ -316,6 +356,9 @@ def KeyboardWorker(key:str,output_queue):
     elif key == 'q':
         output_queue.put('quit')
     
+
+
+
 if __name__ == "__main__":
     chess_game = Game()
     chess_game.run()

@@ -37,7 +37,7 @@ import atexit
 class BoardSensorArray:   
 
     MCP_INSTANCES = ['BOTTOM_CS_PIN', 'MIDBOTTOM_CS_PIN', 'MIDTOP_CS_PIN', 'TOP_CS_PIN']
-    CS_PIN_BANK = [37,33,38,40]
+    CS_PIN_BANK = [37,33,36,40]
 
     def __init__(self,GPIO):
         self.GPIO = GPIO
