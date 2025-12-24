@@ -7,7 +7,7 @@ import json
 import stat
 import os
 from enum import Enum
-
+from dataclasses import dataclass
 
 import numpy as np
 import chess
@@ -16,7 +16,7 @@ from sshkeyboard import listen_keyboard
 import RPi.GPIO as GPIO
 
 from board_sensor_array import BoardSensorArray
-from board_event_handler import BoardEvent, board_uci_move_handler, diff_board_array_to_event
+from board_event_handler import board_uci_move_handler, diff_board_array_to_event
 from socket_client import Socket, wait_unix_socket
 from gpio_definition import BoardPin
 
@@ -31,14 +31,39 @@ class Game:
         RESET = 6
         IDLE = 7
         WAIT_MANUAL_FOR_COMPUTER = 8
-        
+    
+    @dataclass
+    class GameSetup():
+        computer_playing:bool
+        engine_strength:int
+        engine_think_time:int
+        engine_side:str
+        auto_mover:bool = False
+
+        @classmethod
+        def from_json(cls, json_string:str):
+            """Create GameSetup instance from JSON string"""    
+            try:
+                data = json.loads(json_string)
+                return cls(**data) 
+            except TypeError as e:
+                print(f"invalid json, {e}")
+                raise
+
+        def __str__(self):
+            return f"""
+                Game Setup:
+                Computer Playing: {self.computer_playing}
+                Engine Strength: {self.engine_strength}
+                Engine Think Time: {self.engine_think_time}s
+                Engine Side: {self.engine_side.capitalize()}
+                Auto Mover: {self.auto_mover}
+                """
+
     def __init__(self):
         self.game_state = Game.GameState.IDLE
-    
-        #game setup
-        self.game_setup:dict = {
-            "computer_playing":None,"engine_strength":None,"engine_timeout":None,"side":None, "auto_moving":None
-        }
+
+        self.game_setup = None
 
         #game context
         self.turn:str =  "white"
@@ -67,6 +92,7 @@ class Game:
         
         self.Board_array_node = threading.Thread(target=BoardArrayWorker,args=(self.GPIO,self.running_all_threads,self.sensor_put_queue,self.board_queue),daemon=False)
         
+        #closure around listen_keyboard, to pass a queue inside
         cb = lambda key:KeyboardWorker(key,self.keyboard_queue)
         self.Keyboard_listener_node = threading.Thread(target = listen_keyboard,args=(cb,),daemon=True)
         
@@ -93,12 +119,11 @@ class Game:
 
 
     def HandleComputerInput(self):
-        print('handling computer input:')
-        result = self.engine.play(self.board, chess.engine.Limit(time=self.game_setup["engine_timeout"])) 
+        result = self.engine.play(self.board, chess.engine.Limit(time=self.game_setup.engine_think_time)) 
         print("Stockfish move:", result.move)
         self.board.push(result.move)
         self.update_display_flag = True
-        if self.game_setup["auto_moving"] is False:
+        if self.game_setup.auto_mover is False:
             return Game.GameState.WAIT_MANUAL_FOR_COMPUTER
 
         return self.FetchNextPlayer()
@@ -109,18 +134,15 @@ class Game:
         if msg:
             prefix, json_str = msg.split(";", 1)
             if prefix == "start":
-                try:
-                    self.game_setup = json.loads(json_str)
+                self.game_setup = Game.GameSetup.from_json(json_string=json_str)
+                #    &dependency injec
+                self.game_setup.auto_mover = False
 
-                    #    &&&&dependency injec
-                    self.game_setup["auto_moving"] = False
-
-                    print("game setup: ", self.game_setup)
-                    self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo":self.game_setup["engine_strength"]})
-                    print("starting game...")
-                    return self.FetchNextPlayer()
-                except json.JSONDecodeError as e:
-                    print("Invalid JSON:", e)
+                print(self.game_setup)
+                self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo":self.game_setup.engine_strength})
+                print("starting game...")
+                return self.FetchNextPlayer()
+                
 
             elif prefix == "reset":
                 return Game.GameState.RESET
@@ -144,8 +166,8 @@ class Game:
         '''
         Depending on gamemode, return the correct next "player"
         '''
-        if self.game_setup["computer_playing"]:
-            if self.turn == self.game_setup["side"]:
+        if self.game_setup.computer_playing:
+            if self.turn == self.game_setup.engine_side:
                 next = Game.GameState.WAIT_COMPUTER_INPUT
             else:
                 next = Game.GameState.WAIT_HUMAN_INPUT
@@ -171,7 +193,6 @@ class Game:
         key:str = self.PollQueue(self.keyboard_queue)
         if key == 'quit':
             return Game.GameState.QUIT
-        print("await retry:")
         if key == 'completed action':
             return Game.GameState.WAIT_HUMAN_INPUT
 
@@ -247,7 +268,7 @@ class Game:
             sends the following string:
                 "fen;"+  boardstate representation.
             example:
-                fen;rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR
+                "fen;rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR"
             '''
             output:str = "fen;" + fen.split(' ')[0]    
             self.gui_output_message_queue.put(output)
@@ -343,12 +364,6 @@ def ButtonWorker(GPIO:GPIO,queue:Queue,running:Event):
 
 #TODO: replace with 2 GPIO buttons PULLUP on each side of chessboard
 def KeyboardWorker(key:str,output_queue):
-    '''
-    parameter: str: key from terminal
-    returns: None
-    Stops the main thread from sampling from Chessboard
-    signaling flag for completion in main thread: None
-    '''
     if key == 'z':
         print('complete action')
         output_queue.put('completed action')
@@ -356,8 +371,6 @@ def KeyboardWorker(key:str,output_queue):
     elif key == 'q':
         output_queue.put('quit')
     
-
-
 
 if __name__ == "__main__":
     chess_game = Game()

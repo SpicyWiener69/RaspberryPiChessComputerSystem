@@ -23,7 +23,8 @@ static GameSettings game_settings = {
     false,  //computer_playing
     2,      //engine_timeout(s)
     1500,   //engine_strength(elo)
-    0       // computer side; 0 is black, 1 is white                                       
+    0,       // computer side; 0 is black, 1 is white    
+    false        //auto moving;                           
 };
 
 /* === UI dimension definitions ============================ */
@@ -330,7 +331,8 @@ void setting_menu_ui_init(void){
     lv_obj_t* engine_section =  lv_menu_section_create(engine_page);
     lv_obj_add_event_cb(engine_enable_sw, engine_enable_sw_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_user_data(engine_enable_sw, engine_section);
-    
+    //TODO: add switch for automover
+
     /*strength settings*/
     cont = lv_menu_cont_create(engine_section);
     label = lv_label_create(cont);
@@ -467,10 +469,10 @@ static void send_json(void){
     nlohmann::json j;
 
     j["computer_playing"] = game_settings.computer_playing;
-    j["engine_timeout"] = game_settings.engine_timeout;
+    j["engine_think_time"] = game_settings.engine_timeout;
     j["engine_strength"] = game_settings.engine_strength;
     assert(game_settings.side == 0 || game_settings.side == 1);
-    j["side"] = game_settings.side == 0? "black": "white";
+    j["engine_side"] = game_settings.side == 0? "black": "white";
     
     std::string command = "start;";
     std::string message = j.dump();

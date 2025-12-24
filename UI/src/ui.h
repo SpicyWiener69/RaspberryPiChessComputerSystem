@@ -47,6 +47,7 @@ typedef struct{
     int engine_timeout;
     int engine_strength;
     int side; // 0 is black, 1 is white
+    bool auto_mover;
 }GameSettings;
 
 

@@ -2,13 +2,9 @@
 from Drivers.MCP23S17 import MCP23S17
 from Drivers.MCP23S17 import SpiBus
 
-import time
-#import RPi.GPIO as GPIO
 import numpy as np 
 from collections import OrderedDict
 
-import atexit
-#from icecream import ic
 
 '''
     Owns the SPI bus.
@@ -31,7 +27,7 @@ import atexit
 
     ♙♙♙♙♙♙♙     bottom -> 37
     ♖♘♗♕♔♗♘♖     
-    a b
+    a b c ...    h
 
 '''
 class BoardSensorArray:   
@@ -115,7 +111,7 @@ class BoardSensorArray:
 
 if __name__ == "__main__":
     import RPi.GPIO as GPIO
-
+    import time
     #GPIO module setup
     GPIO.setmode(GPIO.BOARD)
 
@@ -125,7 +121,7 @@ if __name__ == "__main__":
             results = board_sensor_array._read_all()            
             board_sensor_array.pretty_print(results)
 
-            time.sleep(1)
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         print("closing...")
