@@ -8,6 +8,7 @@ import stat
 import os
 from enum import Enum
 from dataclasses import dataclass
+import argparse
 
 import numpy as np
 import chess
@@ -60,16 +61,15 @@ class Game:
                 Auto Mover: {self.auto_mover}
                 """
 
-    def __init__(self):
+    def __init__(self, logging:bool = False):
+        self.logging = logging
+        
         self.game_state = Game.GameState.IDLE
-
         self.game_setup = None
-
         #game context
         self.turn:str =  "white"
         self.board = chess.Board()
         self.board_events:list = []
-
         self.update_display_flag:bool = False
         
         self.STOCKFISH_PATH = "/usr/games/stockfish"
@@ -77,6 +77,7 @@ class Game:
         
         #thread control
         self.sensor_put_queue = threading.Event()
+        self.sensor_put_queue.clear()   
         self.running_all_threads = threading.Event()
         self.running_all_threads.set()
 
@@ -109,8 +110,15 @@ class Game:
             self.HandleDisplayLogic()
             time.sleep(0.03)
     
+    def _ResetGameContext(self):
+        self.turn:str =  "white"
+        self.board.reset()
+        self.board_events:list = []
+        self.update_display_flag:bool = False
+        self.sensor_put_queue.clear()   
 
-    def _switch_turn(self):
+
+    def _SwitchTurn(self):
         assert self.turn == "white" or "black"
         if self.turn == "white":
             self.turn = "black"
@@ -137,13 +145,11 @@ class Game:
                 self.game_setup = Game.GameSetup.from_json(json_string=json_str)
                 #    &dependency injec
                 self.game_setup.auto_mover = False
-
                 print(self.game_setup)
                 self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo":self.game_setup.engine_strength})
                 print("starting game...")
-                return self.FetchNextPlayer()
-                
 
+                return self.FetchNextPlayer()
             elif prefix == "reset":
                 return Game.GameState.RESET
 
@@ -164,8 +170,13 @@ class Game:
 
     def FetchNextPlayer(self):
         '''
-        Depending on gamemode, return the correct next "player"
+        Depending on gamemode, return the correct next "player". checks if the outcome is decided.
         '''
+        outcome = self.board.outcome()
+        if outcome:
+            print(outcome)
+            return Game.GameState.IDLE
+
         if self.game_setup.computer_playing:
             if self.turn == self.game_setup.engine_side:
                 next = Game.GameState.WAIT_COMPUTER_INPUT
@@ -173,7 +184,7 @@ class Game:
                 next = Game.GameState.WAIT_HUMAN_INPUT
         else:
             next = Game.GameState.WAIT_HUMAN_INPUT
-        self._switch_turn()
+        self._SwitchTurn()
         return next
     
     def WaitManualMoveForComputer(self):
@@ -202,8 +213,7 @@ class Game:
     def HandleHumanInput(self):
         self.sensor_put_queue.set()
         new_action = self.PollQueue(self.board_queue)
-        key:str = self.PollQueue(self.keyboard_queue)
-        
+        key:str = self.PollQueue(self.keyboard_queue) 
         if new_action:
             print(f'new move {new_action}')
             self.board_events.append(new_action)
@@ -218,16 +228,14 @@ class Game:
                 print('_________')
                 print(uci_moves)
                 next = self.FetchNextPlayer()
-                
             else:
                 self.update_display_flag = False
                 print('retry move')
                 next =  Game.GameState.WAIT_RETRY_MOVE_CONFIRM
                 
-            #reset the actions buffer
+            #reset the board detection buffer
             self.board_events = []
             return next
-        
         return Game.GameState.WAIT_HUMAN_INPUT
     
 
@@ -284,11 +292,8 @@ class Game:
     
     
     def HandleReset(self):
-        self.turn:str =  "white"
+        self._ResetGameContext()
         self.gui_output_message_queue.put("fen;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
-        self.board.reset()
-        self.board_events:list = []
-
         return Game.GameState.IDLE
     
 
@@ -331,20 +336,41 @@ def BoardArrayWorker(GPIO,running:Event,push_to_queue,output_queue,poll_interval
 
     '''
     board_sensor_array = BoardSensorArray(GPIO=GPIO)
-    prev_board_value = board_sensor_array._read_all()
+    # prev_board_value = board_sensor_array._read_all()
+    # while running.is_set():
+    #     #if not push_to_queue.is_set():
+    #     push_to_queue.wait()
+    #     new_board = board_sensor_array._read_all()
+    #     if not np.array_equal(new_board, prev_board_value):
+    #         board_event = diff_board_array_to_event(prev_board_value,new_board)
+    #         if board_event is None:
+    #             #handle board_array_to_uci errors.
+    #             continue
+    #         prev_board_value = new_board
+    #         #if push_to_queue.is_set():
+    #         output_queue.put(board_event)
+    #         print(f'board event detected:{board_event}') #   
+    #     time.sleep(poll_interval)    
     while running.is_set():
+        if push_to_queue.is_set() is False:
+            first:bool = True
+        push_to_queue.wait() 
         new_board = board_sensor_array._read_all()
-        if not np.array_equal(new_board, prev_board_value):
-            board_event = diff_board_array_to_event(prev_board_value,new_board)
-            if board_event is None:
-                #handle board_array_to_uci errors.
-                continue
-            prev_board_value = new_board
-            if push_to_queue.is_set():
-                output_queue.put(board_event)
-        time.sleep(poll_interval)    
-    
-    
+        if first:
+            prev_board = new_board
+            first = False
+        if np.array_equal(prev_board, new_board):
+            continue
+        board_event = diff_board_array_to_event(prev_board,new_board)
+        if board_event is None:
+            #handle board_array_to_uci errors.
+            continue
+        prev_board = new_board
+        output_queue.put(board_event)
+        print(f'board event detected:{board_event}') #
+        time.sleep(poll_interval)
+
+
     board_sensor_array.close_spi()
 
 def ButtonWorker(GPIO:GPIO,queue:Queue,running:Event):
@@ -372,9 +398,16 @@ def KeyboardWorker(key:str,output_queue):
         output_queue.put('quit')
     
 
-if __name__ == "__main__":
-    chess_game = Game()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a",action='store_true',default=False,help = "enable aws logging")
+    args = parser.parse_args()
+    chess_game = Game(logging = args.a)
     chess_game.run()
+
+
+if __name__ == "__main__":
+    main()
     
     
         
