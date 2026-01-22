@@ -1,6 +1,8 @@
 import chess
 from icecream import ic
 import numpy as np
+from typing import Optional
+
 
 class BoardEvent:
     def __init__(self, enabled:bool, coordinate: str):
@@ -12,12 +14,11 @@ class BoardEvent:
         return string
 
     
-def board_uci_move_handler(events_list,board:chess.Board) -> tuple:
+def board_uci_move_handler(events_list,board:chess.Board) -> Optional[tuple[chess.Move,str]]:
     '''
-    modifies the given chess.Board if the event list is valid.
-    else, leaves chess.Board untouched and returns 0, with the converted uci_moves.
+    modifies the given chess.Board if the event list is valid. returns the converted uci_moves.
+    else, leaves chess.Board untouched and returns None
     '''
-    print(events_list)
     uci_moves = ""
     castling = check_castling(events_list,board)
     if castling:
@@ -29,17 +30,19 @@ def board_uci_move_handler(events_list,board:chess.Board) -> tuple:
         promotion = check_promotion(events_list,board)
         if promotion:
             uci_moves += promotion
+    
     try:
         move = chess.Move.from_uci(uci_moves)
     except chess.InvalidMoveError:
         ic(f"Illegal move: {uci_moves}")
-        return (0,uci_moves)
+        return None
     
-    if move in board.legal_moves:
-        board.push(move)
-        return (1, uci_moves)
-    ic(f"Illegal move: {uci_moves}")
-    return (0,uci_moves)
+    if move not in board.legal_moves:
+        ic(f"Illegal move: {uci_moves}")
+        return None
+    else:
+        #board.push(move)
+        return (move,uci_moves)
 
 
 def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEvent:

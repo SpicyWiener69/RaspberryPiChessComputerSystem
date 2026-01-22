@@ -221,12 +221,13 @@ class Game:
         if key == 'completed action' and len(self.board_events) > 1:
             self.sensor_put_queue.clear()
             print('parsing move:')
-            success,uci_moves = board_uci_move_handler(self.board_events,self.board)
-            if success:
+            move,uci_move = board_uci_move_handler(self.board_events,self.board)
+            if move:
+                self.board.push(move)
                 self.update_display_flag = True
                 print(self.board)
                 print('_________')
-                print(uci_moves)
+                print(uci_move)
                 next = self.FetchNextPlayer()
             else:
                 self.update_display_flag = False
