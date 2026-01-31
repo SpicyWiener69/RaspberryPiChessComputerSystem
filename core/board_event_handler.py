@@ -12,11 +12,11 @@ class BoardEvent:
     def __str__(self):
         string = f"{self.coordinate} down" if self.enabled else f"{self.coordinate} up"
         return string
-
+    
     
 def board_uci_move_handler(events_list,board:chess.Board) -> Optional[tuple[chess.Move,str]]:
     '''
-    modifies the given chess.Board if the event list is valid. returns the converted uci_moves.
+    if the event list is valid: returns the converted (move, uci_moves).
     else, leaves chess.Board untouched and returns None
     '''
     uci_moves = ""
@@ -241,7 +241,7 @@ def _test_promotion():
 if __name__ == "__main__":
     #_test_moves()
     #_test_castling()
-    _test_promotion()    
+    #_test_promotion()    
 
 
 
