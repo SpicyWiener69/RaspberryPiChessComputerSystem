@@ -1,5 +1,4 @@
 import chess
-from icecream import ic
 import numpy as np
 from typing import Optional
 from enum import Enum
@@ -12,13 +11,24 @@ class UciMove():
         PureMove = 3
         EnPassant = 4
         
-
-    def __init__(self,uci:str,movetype:Type) -> None:
-        assert(len(uci) == 4)
+    def __init__(self,uci:str,movetype:Type):
+        #assert(len(uci4) == 4)
         self.uci = uci
+        if len(self.uci) == 5:
+            self.promotion_piece:str = self.uci[-1]
+        
         self.Movetype = movetype
+        #return self
 
-
+    def get_uci4(self):
+        # Always returns the 4-character move (origin+destination) 
+        # regardless of promotion. Used by pathfinding algorithm.
+        return self.uci[:4]
+       
+    def get_uci(self):
+        # Returns proper UCI string. used for python-chess interfacing.
+        return self.uci
+    
 class BoardEvent:
     def __init__(self, enabled:bool, coordinate: str):
         self.coordinate = coordinate        
@@ -34,32 +44,37 @@ def board_uci_move_handler(events_list,board:chess.Board) -> Optional[UciMove]:
     if the event list is valid: returns the converted UciMove instance.
     else: returns None
     '''
-    uci_move = UciMove()
+    
     uci_str = ""
-    castling = check_castling(events_list,board)
-    if castling:
-        uci_str = castling
-        uci_move.Movetype = uci_move.Type.Castle
+    move_type = None
+    
+
+    # Castling check
+    if len(events_list) == 4:
+        uci_str = check_castling(events_list,board)
+        move_type = UciMove.Type.Castle
+         
     else:
         uci_str = handle_move(events_list)
         #Promotion check
         promotion = check_promotion(events_list,board)
-        if promotion:
-            uci_str += promotion
-            
+        uci_str += promotion
+
     try:
         move = chess.Move.from_uci(uci_str)
     except chess.InvalidMoveError:
-        ic(f"Illegal move: {uci_str}")
+        print(f"Illegal move: {uci_str}")
         return None
-    
-    if move not in board.legal_moves:
-        ic(f"Illegal move: {uci_str}")
-        return None
+
+    if board.is_en_passant(move):
+        move_type = UciMove.Type.EnPassant
+    elif board.is_capture(move):
+        move_type = UciMove.Type.Take
     else:
-        #board.push(move)
-        uci_move.uci = uci_str
-        return uci_move
+        move_type = UciMove.Type.PureMove
+    
+    
+    return UciMove(uci_str,move_type)
 
 
 def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEvent:
@@ -99,13 +114,27 @@ def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEv
 
 
 def handle_move(events_list) -> str:
-    move = events_list[0].coordinate + events_list[1].coordinate
-    return move
+
+    #pure move
+    if len(events_list) == 2:
+        origin = events_list[0].coordinate
+        destination = events_list[1].coordinate
+
+    # capture move
+    elif len(events_list) == 3:
+        destination = events_list[-1].coordinate
+        # The origin is whichever of the first two events is NOT the destination
+        if events_list[0].coordinate != destination:
+            origin = events_list[0].coordinate
+        else:
+            origin = events_list[1].coordinate
+    else:
+        # Invalid event list length
+        return None
+    return origin + destination
+
 
 def check_castling(events_list,board) -> Optional[str]:
-    if len(events_list) != 4:
-        return None
-
     possible_castling_moves ={
     (
     ('e1', 'h1', 'f1', 'g1'),
@@ -147,13 +176,13 @@ def check_promotion(events_list,board) -> str:
     start_square = events_list[0].coordinate
     piece = board.piece_at(chess.parse_square(start_square))
     if piece is None or piece.piece_type != chess.PAWN:
-        return None
+        return ""
     destination_square = events_list[-1].coordinate
     rank = destination_square[-1] 
     if (piece.color == chess.WHITE and rank == '8') or (piece.color == chess.BLACK and rank == '1'):
         return ask_for_promotion_piece()
 
-    return None
+    return ""
 
 def ask_for_promotion_piece() -> str:
     #For now always queen
@@ -170,29 +199,42 @@ def piece_on_ourside(board,coordinate)->bool:
     return False
 
 def _test_moves():
-    #Test pure move
     board = chess.Board()
     event_list = []
     event_list.append(BoardEvent(False,"e2"))
     event_list.append(BoardEvent(True,"e4"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
    
     event_list = []
     event_list.append(BoardEvent(False,"d7"))
     event_list.append(BoardEvent(True,"d5"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
-    print("--------------------------------")
 
+    print("-------------take:case 1---------------")
     event_list = []
     event_list.append(BoardEvent(False,"e4"))
     event_list.append(BoardEvent(False,"d5"))  
     event_list.append(BoardEvent(True,"d5"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
+    print(board)
+
+    print("-------------take:case 2---------------")
+    board = chess.Board(fen = "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")
     print(board)
     print("--------------------------------")
+    event_list = []
+    event_list.append(BoardEvent(False,"d5"))  
+    event_list.append(BoardEvent(False,"e4"))
+    event_list.append(BoardEvent(True,"d5")) 
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
+    print(board)
 
 def _test_castling():
     
@@ -205,7 +247,8 @@ def _test_castling():
     event_list.append(BoardEvent(False,"a1"))  
     event_list.append(BoardEvent(True,"c1"))  
     event_list.append(BoardEvent(True,"d1"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
 
@@ -217,7 +260,8 @@ def _test_castling():
     event_list.append(BoardEvent(False,"e1"))  
     event_list.append(BoardEvent(True,"g1"))  
     event_list.append(BoardEvent(True,"f1"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
 
@@ -229,7 +273,8 @@ def _test_castling():
     event_list.append(BoardEvent(False,"h8"))  
     event_list.append(BoardEvent(True,"g8"))  
     event_list.append(BoardEvent(True,"f8"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
 
@@ -240,7 +285,8 @@ def _test_promotion():
     event_list = []
     event_list.append(BoardEvent(False,"d7"))
     event_list.append(BoardEvent(True,"d8"))  
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
 
@@ -251,7 +297,8 @@ def _test_promotion():
     event_list.append(BoardEvent(False,"d7"))
     event_list.append(BoardEvent(False,"c8")) 
     event_list.append(BoardEvent(True,"c8"))   
-    board_uci_move_handler(event_list,board)
+    uci_move = board_uci_move_handler(event_list,board)
+    board.push_uci(uci_move.uci)
     print(board)
     print("--------------------------------")
 

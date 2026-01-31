@@ -5,6 +5,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from enum import Enum, IntEnum
 
+from board_event_handler import UciMove
 
 
 class MazeT(IntEnum):
@@ -155,7 +156,7 @@ class PhysicalChessboard():
     @staticmethod
     def _dissect_move(move:UciMove) -> list[tuple[str,Optional[str]]]:
         assert(len(move.uci) == 4)
-
+    
         castling_expansion = {
             "e1g1": [("e1","g1"), ("h1","f1")], 
             "e1c1": [("e1","c1"), ("a1","d1")],
