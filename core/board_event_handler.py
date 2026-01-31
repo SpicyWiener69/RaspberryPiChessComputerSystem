@@ -2,6 +2,21 @@ import chess
 from icecream import ic
 import numpy as np
 from typing import Optional
+from enum import Enum
+
+
+class UciMove():
+    class Type(Enum):
+        Castle = 1
+        Take = 2
+        PureMove = 3
+        EnPassant = 4
+        
+
+    def __init__(self,uci:str,movetype:Type) -> None:
+        assert(len(uci) == 4)
+        self.uci = uci
+        self.Movetype = movetype
 
 
 class BoardEvent:
@@ -14,35 +29,37 @@ class BoardEvent:
         return string
     
     
-def board_uci_move_handler(events_list,board:chess.Board) -> Optional[tuple[chess.Move,str]]:
+def board_uci_move_handler(events_list,board:chess.Board) -> Optional[UciMove]:
     '''
-    if the event list is valid: returns the converted (move, uci_moves).
-    else, leaves chess.Board untouched and returns None
+    if the event list is valid: returns the converted UciMove instance.
+    else: returns None
     '''
-    uci_moves = ""
+    uci_move = UciMove()
+    uci_str = ""
     castling = check_castling(events_list,board)
     if castling:
-        uci_moves = castling
-
+        uci_str = castling
+        uci_move.Movetype = uci_move.Type.Castle
     else:
-        uci_moves = handle_move(events_list)
+        uci_str = handle_move(events_list)
         #Promotion check
         promotion = check_promotion(events_list,board)
         if promotion:
-            uci_moves += promotion
-    
+            uci_str += promotion
+            
     try:
-        move = chess.Move.from_uci(uci_moves)
+        move = chess.Move.from_uci(uci_str)
     except chess.InvalidMoveError:
-        ic(f"Illegal move: {uci_moves}")
+        ic(f"Illegal move: {uci_str}")
         return None
     
     if move not in board.legal_moves:
-        ic(f"Illegal move: {uci_moves}")
+        ic(f"Illegal move: {uci_str}")
         return None
     else:
         #board.push(move)
-        return (move,uci_moves)
+        uci_move.uci = uci_str
+        return uci_move
 
 
 def diff_board_array_to_event(prev_array:np.array,new_array:np.array) -> BoardEvent:
@@ -85,7 +102,7 @@ def handle_move(events_list) -> str:
     move = events_list[0].coordinate + events_list[1].coordinate
     return move
 
-def check_castling(events_list,board) -> str:
+def check_castling(events_list,board) -> Optional[str]:
     if len(events_list) != 4:
         return None
 
@@ -239,7 +256,7 @@ def _test_promotion():
     print("--------------------------------")
 
 if __name__ == "__main__":
-    #_test_moves()
+    _test_moves()
     #_test_castling()
     #_test_promotion()    
 

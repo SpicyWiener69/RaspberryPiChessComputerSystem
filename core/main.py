@@ -222,6 +222,7 @@ class Game:
             self.sensor_put_queue.clear()
             print('parsing move:')
             move,uci_move = board_uci_move_handler(self.board_events,self.board)
+            
             if move:
                 self.board.push(move)
                 self.update_display_flag = True

@@ -5,18 +5,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from enum import Enum, IntEnum
 
-class UciMove():
-    class Type(Enum):
-        Castle = 1
-        Take = 2
-        PureMove = 3
-        EnPassant = 4
-        
 
-    def __init__(self,uci:str,movetype:Type) -> None:
-        assert(len(uci) == 4)
-        self.uci = uci
-        self.Movetype = movetype
 
 class MazeT(IntEnum):
     FLOOR = 0
