@@ -5,13 +5,13 @@ from enum import Enum
 
 
 class UciMove():
-    class Type(Enum):
-        Castle = 1
-        Take = 2
-        PureMove = 3
-        EnPassant = 4
+    # class Type(Enum):
+    Castle = 1
+    Take = 2
+    PureMove = 3
+    EnPassant = 4
         
-    def __init__(self,uci:str,movetype:Type):
+    def __init__(self,uci:str,movetype):
         #assert(len(uci4) == 4)
         self.uci = uci
         if len(self.uci) == 5:
@@ -52,7 +52,7 @@ def board_uci_move_handler(events_list,board:chess.Board) -> Optional[UciMove]:
     # Castling check
     if len(events_list) == 4:
         uci_str = check_castling(events_list,board)
-        move_type = UciMove.Type.Castle
+        move_type = UciMove.Castle
          
     else:
         uci_str = handle_move(events_list)
@@ -62,16 +62,16 @@ def board_uci_move_handler(events_list,board:chess.Board) -> Optional[UciMove]:
 
     try:
         move = chess.Move.from_uci(uci_str)
-    except chess.InvalidMoveError:
+    except:
         print(f"Illegal move: {uci_str}")
         return None
 
     if board.is_en_passant(move):
-        move_type = UciMove.Type.EnPassant
+        move_type = UciMove.EnPassant
     elif board.is_capture(move):
-        move_type = UciMove.Type.Take
+        move_type = UciMove.Take
     else:
-        move_type = UciMove.Type.PureMove
+        move_type = UciMove.PureMove
     
     
     return UciMove(uci_str,move_type)

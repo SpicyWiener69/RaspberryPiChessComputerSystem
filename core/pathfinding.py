@@ -156,7 +156,7 @@ class PhysicalChessboard():
     @staticmethod
     def _dissect_move(move:UciMove) -> list[tuple[str,Optional[str]]]:
         assert(len(move.uci) == 4)
-    
+
         castling_expansion = {
             "e1g1": [("e1","g1"), ("h1","f1")], 
             "e1c1": [("e1","c1"), ("a1","d1")],
@@ -165,16 +165,16 @@ class PhysicalChessboard():
             }
 
         start_dest_pair = []
-        if move.Movetype == move.Type.Castle:
+        if move.Movetype == move.Castle:
             start_dest_pair.extend(castling_expansion[move.uci])
-        elif move.Movetype == move.Type.Take:
+        elif move.Movetype == move.Take:
             taken_square = move.uci[-2:]
             start_dest_pair.append((taken_square, "park"))
             start_dest_pair.append((move.uci[:2], move.uci[2:]))
-        elif move.Movetype == move.Type.PureMove:     
+        elif move.Movetype == move.PureMove:     
             start_dest_pair.append((move.uci[:2], move.uci[2:]))
 
-        elif move.Movetype == move.Type.EnPassant:
+        elif move.Movetype == move.EnPassant:
             #moves the capture pawn to the correct position
             start_dest_pair.append((move.uci[:2], move.uci[2:]))
             '''
@@ -499,7 +499,7 @@ def _test_integration():
     board = chess.Board(fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
     print(board)
     physical_chessboard = PhysicalChessboard(board=board)
-    move = UciMove("e2e4", UciMove.Type.PureMove)
+    move = UciMove("e2e4", UciMove.PureMove)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(maze=physical_chessboard.maze,paths=paths)
     plt.show()
@@ -508,7 +508,7 @@ def _test_integration():
     board = chess.Board(fen = "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1")
     print(board)
     physical_chessboard = PhysicalChessboard(board=board)
-    move = UciMove("e4d5", UciMove.Type.Take)
+    move = UciMove("e4d5", UciMove.Take)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(maze=physical_chessboard.maze,paths=paths)
     plt.show()
@@ -517,7 +517,7 @@ def _test_integration():
     board = chess.Board(fen = "rnb1kbnr/ppp3pp/3q4/1B1ppp2/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1")
     print(board)
     physical_chessboard = PhysicalChessboard(board=board)
-    move = UciMove("e1g1", UciMove.Type.Castle)
+    move = UciMove("e1g1", UciMove.Castle)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(paths=paths,maze=physical_chessboard.maze)
     plt.show()
@@ -526,7 +526,7 @@ def _test_integration():
     board = chess.Board(fen = "rnbqkbnr/ppp1p1pp/8/4Pp2/2Pp1P2/8/PP1P2PP/RNBQKBNR b KQkq - 0 1")
     print(board)
     physical_chessboard = PhysicalChessboard(board=board)
-    move = UciMove("e5f6", UciMove.Type.EnPassant)
+    move = UciMove("e5f6", UciMove.EnPassant)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(paths=paths,maze=physical_chessboard.maze)
     plt.show()
@@ -535,7 +535,7 @@ def _test_integration():
     board = chess.Board(fen = "rnbqkbnr/ppp1p1pp/8/4Pp2/2Pp1P2/8/PP1P2PP/RNBQKBNR b KQkq - 0 1")
     print(board)
     physical_chessboard = PhysicalChessboard(board=board)
-    move = UciMove("c4d3", UciMove.Type.EnPassant)
+    move = UciMove("c4d3", UciMove.EnPassant)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(paths=paths,maze=physical_chessboard.maze)
     plt.show()
@@ -544,7 +544,7 @@ def _test_integration():
     board = chess.Board(fen = "rnbqkbnr/pp2pppp/8/2pp4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 1")
     physical_chessboard = PhysicalChessboard(board=board)
     print("-------------")
-    move = UciMove("e4d5", UciMove.Type.Take)
+    move = UciMove("e4d5", UciMove.Take)
     paths = physical_chessboard.Pathfind_UCI(move)
     physical_chessboard.plot_paths(paths=paths,maze=physical_chessboard.maze)
     print(board)
@@ -555,7 +555,7 @@ def _test_integration():
     plt.show()
 
 
-    move = UciMove("c5d4", UciMove.Type.Take)
+    move = UciMove("c5d4", UciMove.Take)
     print(board)
     print("-------------")
     paths = physical_chessboard.Pathfind_UCI(move)

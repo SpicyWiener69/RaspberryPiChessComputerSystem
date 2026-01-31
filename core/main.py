@@ -21,9 +21,7 @@ from board_event_handler import board_uci_move_handler, diff_board_array_to_even
 from socket_client import Socket, wait_unix_socket
 from gpio_definition import BoardPin
 
-class Game:
-    
-    class GameState(Enum):
+class GameState(Enum):
         WAIT_HUMAN_INPUT = 1
         WAIT_RETRY_MOVE_CONFIRM = 2
         WAIT_COMPUTER_INPUT = 3
@@ -32,39 +30,43 @@ class Game:
         RESET = 6
         IDLE = 7
         WAIT_MANUAL_FOR_COMPUTER = 8
+
+
+@dataclass
+class GameSetup():
+    computer_playing:bool
+    engine_strength:int
+    engine_think_time:int
+    engine_side:str
+    auto_mover:bool = False
+
+    @classmethod
+    def from_json(cls, json_string:str):
+        """Create GameSetup instance from JSON string"""    
+        try:
+            data = json.loads(json_string)
+            return cls(**data) 
+        except TypeError as e:
+            print(f"invalid json, {e}")
+            raise
+
+    def __str__(self):
+        return f"""
+            Game Setup:
+            Computer Playing: {self.computer_playing}
+            Engine Strength: {self.engine_strength}
+            Engine Think Time: {self.engine_think_time}s
+            Engine Side: {self.engine_side.capitalize()}
+            Auto Mover: {self.auto_mover}
+            """
     
-    @dataclass
-    class GameSetup():
-        computer_playing:bool
-        engine_strength:int
-        engine_think_time:int
-        engine_side:str
-        auto_mover:bool = False
 
-        @classmethod
-        def from_json(cls, json_string:str):
-            """Create GameSetup instance from JSON string"""    
-            try:
-                data = json.loads(json_string)
-                return cls(**data) 
-            except TypeError as e:
-                print(f"invalid json, {e}")
-                raise
-
-        def __str__(self):
-            return f"""
-                Game Setup:
-                Computer Playing: {self.computer_playing}
-                Engine Strength: {self.engine_strength}
-                Engine Think Time: {self.engine_think_time}s
-                Engine Side: {self.engine_side.capitalize()}
-                Auto Mover: {self.auto_mover}
-                """
+class Game:    
 
     def __init__(self, logging:bool = False):
         self.logging = logging
         
-        self.game_state = Game.GameState.IDLE
+        self.game_state = GameState.IDLE
         self.game_setup = None
         #game context
         self.turn:str =  "white"
@@ -132,7 +134,7 @@ class Game:
         self.board.push(result.move)
         self.update_display_flag = True
         if self.game_setup.auto_mover is False:
-            return Game.GameState.WAIT_MANUAL_FOR_COMPUTER
+            return GameState.WAIT_MANUAL_FOR_COMPUTER
 
         return self.FetchNextPlayer()
 
@@ -142,7 +144,7 @@ class Game:
         if msg:
             prefix, json_str = msg.split(";", 1)
             if prefix == "start":
-                self.game_setup = Game.GameSetup.from_json(json_string=json_str)
+                self.game_setup = GameSetup.from_json(json_string=json_str)
                 #    &dependency injec
                 self.game_setup.auto_mover = False
                 print(self.game_setup)
@@ -151,13 +153,13 @@ class Game:
 
                 return self.FetchNextPlayer()
             elif prefix == "reset":
-                return Game.GameState.RESET
+                return GameState.RESET
 
         return None
     
 
     def HandleIdle(self):
-        return Game.GameState.IDLE
+        return GameState.IDLE
     
 
     @staticmethod
@@ -175,15 +177,15 @@ class Game:
         outcome = self.board.outcome()
         if outcome:
             print(outcome)
-            return Game.GameState.IDLE
+            return GameState.IDLE
 
         if self.game_setup.computer_playing:
             if self.turn == self.game_setup.engine_side:
-                next = Game.GameState.WAIT_COMPUTER_INPUT
+                next = GameState.WAIT_COMPUTER_INPUT
             else:
-                next = Game.GameState.WAIT_HUMAN_INPUT
+                next = GameState.WAIT_HUMAN_INPUT
         else:
-            next = Game.GameState.WAIT_HUMAN_INPUT
+            next = GameState.WAIT_HUMAN_INPUT
         self._SwitchTurn()
         return next
     
@@ -196,18 +198,18 @@ class Game:
         key:str = self.PollQueue(self.keyboard_queue)
         if key == 'completed action':
             return self.FetchNextPlayer()
-        return Game.GameState.WAIT_MANUAL_FOR_COMPUTER
+        return GameState.WAIT_MANUAL_FOR_COMPUTER
 
 
     def HandleRetryConfirm(self):
         #self.sensor_put_queue.clear()
         key:str = self.PollQueue(self.keyboard_queue)
         if key == 'quit':
-            return Game.GameState.QUIT
+            return GameState.QUIT
         if key == 'completed action':
-            return Game.GameState.WAIT_HUMAN_INPUT
+            return GameState.WAIT_HUMAN_INPUT
 
-        return Game.GameState.WAIT_RETRY_MOVE_CONFIRM
+        return GameState.WAIT_RETRY_MOVE_CONFIRM
 
 
     def HandleHumanInput(self):
@@ -233,12 +235,12 @@ class Game:
             else:
                 self.update_display_flag = False
                 print('retry move')
-                next =  Game.GameState.WAIT_RETRY_MOVE_CONFIRM
+                next =  GameState.WAIT_RETRY_MOVE_CONFIRM
                 
             #reset the board detection buffer
             self.board_events = []
             return next
-        return Game.GameState.WAIT_HUMAN_INPUT
+        return GameState.WAIT_HUMAN_INPUT
     
 
     def HandleGameLogic(self):
@@ -248,19 +250,19 @@ class Game:
         if gui_msg:
             self.game_state = gui_msg
 
-        if self.game_state == Game.GameState.IDLE:
+        if self.game_state == GameState.IDLE:
             nextstate = self.HandleIdle()
-        elif self.game_state == Game.GameState.WAIT_HUMAN_INPUT:
+        elif self.game_state == GameState.WAIT_HUMAN_INPUT:
             nextstate = self.HandleHumanInput()
-        elif self.game_state == Game.GameState.WAIT_COMPUTER_INPUT:
+        elif self.game_state == GameState.WAIT_COMPUTER_INPUT:
             nextstate = self.HandleComputerInput()
-        elif self.game_state == Game.GameState.WAIT_RETRY_MOVE_CONFIRM:
+        elif self.game_state == GameState.WAIT_RETRY_MOVE_CONFIRM:
             nextstate = self.HandleRetryConfirm()
-        elif self.game_state == Game.GameState.RESET:
+        elif self.game_state == GameState.RESET:
             nextstate = self.HandleReset()
-        elif self.game_state == Game.GameState.QUIT:
+        elif self.game_state == GameState.QUIT:
             nextstate = self.HandleQuit()
-        elif self.game_state == Game.GameState.WAIT_MANUAL_FOR_COMPUTER:
+        elif self.game_state == GameState.WAIT_MANUAL_FOR_COMPUTER:
             nextstate = self.WaitManualMoveForComputer()
         else:
             raise ValueError(f"Invalid game state: {self.game_state}")
@@ -296,7 +298,7 @@ class Game:
     def HandleReset(self):
         self._ResetGameContext()
         self.gui_output_message_queue.put("fen;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
-        return Game.GameState.IDLE
+        return GameState.IDLE
     
 
 def GuiWorker(socket_path:str,running,input_queue,output_queue):
